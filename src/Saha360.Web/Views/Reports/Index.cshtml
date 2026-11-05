@@ -1,0 +1,67 @@
+@model ReportTable
+@{
+    ViewData["Title"] = "Raporlar";
+    var q = (ReportQuery)ViewData["Query"]!;
+    var lk = (Lookups)ViewData["Lookups"]!;
+    var emps = (List<Option>)ViewData["Employees"]!;
+    var d = Model.Definition;
+}
+<div class="page-head">
+    <h1 class="page-title">Raporlar</h1>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-secondary" type="button" onclick="window.print()">Yazdır</button>
+        <a class="btn btn-primary" href="/raporlar/csv@(Context.Request.QueryString)">@Ui.Icon("download") CSV / Excel</a>
+    </div>
+</div>
+<div class="row g-3">
+    <div class="col-lg-3 no-print">
+        <nav class="list-group report-nav" aria-label="Raporlar">
+            @foreach (var r in ReportService.All)
+            {
+                <a class="list-group-item list-group-item-action @(r.Key == d.Key ? "active" : "")"
+                   href="/raporlar?key=@r.Key&from=@Model.FromLocal.ToString("yyyy-MM-dd")&to=@Model.ToLocal.ToString("yyyy-MM-dd")@(q.UnitId is int u ? "&unitId=" + u : "")">@r.Title</a>
+            }
+        </nav>
+    </div>
+    <div class="col-lg-9">
+        <form method="get" class="card filter-card mb-3 no-print"><div class="card-body row g-2 align-items-end">
+            <input type="hidden" name="key" value="@d.Key" />
+            <div class="col-6 col-md-3"><label class="form-label small" for="rf">Başlangıç</label><input id="rf" type="date" name="from" value="@Model.FromLocal.ToString("yyyy-MM-dd")" class="form-control" /></div>
+            <div class="col-6 col-md-3"><label class="form-label small" for="rt">Bitiş</label><input id="rt" type="date" name="to" value="@Model.ToLocal.ToString("yyyy-MM-dd")" class="form-control" /></div>
+            <div class="col-6 col-md-3"><label class="form-label small" for="ru">Birim</label><select id="ru" name="unitId" class="form-select"><option value="">Tümü</option>
+                @foreach (var o in lk.Units) { <option value="@o.Id" selected="@(q.UnitId == o.Id)">@o.Name</option> }</select></div>
+            @if (d.Key == "atama-gecmisi")
+            {
+                <div class="col-6 col-md-3"><label class="form-label small" for="re">Personel</label><select id="re" name="employeeId" class="form-select"><option value="">Tümü</option>
+                    @foreach (var o in emps) { <option value="@o.Id" selected="@(q.EmployeeId == o.Id)">@o.Name</option> }</select></div>
+            }
+            <div class="col-6 col-md-3"><button class="btn btn-primary w-100" type="submit">Raporu getir</button></div>
+        </div></form>
+
+        <section class="card">
+            <div class="card-header">
+                <div class="fw-semibold">@d.Title</div>
+                <div class="small text-secondary">@d.Description</div>
+                <div class="small">Dönem: <b>@Model.FromLocal.ToString("dd.MM.yyyy") – @Model.ToLocal.ToString("dd.MM.yyyy")</b> · Tarih alanı: <b>@d.DateField</b></div>
+            </div>
+            <div class="card-body p-0">
+                @if (Model.Rows.Count == 0)
+                {
+                    <div class="empty">Bu dönem ve süzgeçler için kayıt yok.</div>
+                }
+                else
+                {
+                    <div class="table-responsive"><table class="table table-sm table-striped align-middle mb-0 report-table">
+                        <thead><tr>@foreach (var c in Model.Columns) { <th>@c</th> }</tr></thead>
+                        <tbody>@foreach (var r in Model.Rows) { <tr>@foreach (var c in r) { <td>@c</td> }</tr> }</tbody>
+                    </table></div>
+                }
+            </div>
+            @if (Model.Notes.Count > 0)
+            {
+                <div class="card-footer small text-secondary">@foreach (var n in Model.Notes) { <div>ⓘ @n</div> }</div>
+            }
+        </section>
+        <p class="small text-secondary mt-2">Raporlar yalnız görme yetkiniz olan işleri kapsar; dışa aktarılan dosya da aynı kapsamdadır.</p>
+    </div>
+</div>

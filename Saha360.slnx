@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Saha360.Domain/Saha360.Domain.csproj" />
+    <Project Path="src/Saha360.Infrastructure/Saha360.Infrastructure.csproj" />
+    <Project Path="src/Saha360.Web/Saha360.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Saha360.Tests/Saha360.Tests.csproj" />
+  </Folder>
+</Solution>

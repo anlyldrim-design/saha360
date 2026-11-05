@@ -1,0 +1,94 @@
+@model DashboardData
+@inject CurrentUser Current
+@{
+    ViewData["Title"] = "Gösterge Paneli";
+    var me = await Current.GetAsync();
+    var myWorks = ViewData["MyWorks"] as List<MyWorkCard>;
+    var max = Math.Max(1, Model.ByStatus.Select(s => s.Count).DefaultIfEmpty(0).Max());
+}
+<div class="page-head">
+    <div>
+        <h1 class="page-title">Gösterge Paneli</h1>
+        <p class="text-secondary mb-0">Merhaba @me.FullName · @TrTime.NowLocal.ToString("dd MMMM yyyy, dddd", TrTime.Culture)</p>
+    </div>
+    @if (me.CanAssign || me.CanCreateWork)
+    {
+        <div class="d-flex gap-2">
+            @if (me.CanAssign) { <a href="/havuz" class="btn btn-outline-primary">@Ui.Icon("grid") Personel havuzu</a> }
+            @if (me.CanCreateWork) { <a href="/isler/yeni" class="btn btn-primary">@Ui.Icon("plus") Yeni iş</a> }
+        </div>
+    }
+</div>
+
+<div class="stat-grid">
+    @foreach (var c in Model.Cards)
+    {
+        <a class="stat-card tone-@c.Tone" href="@c.Url">
+            <span class="stat-value">@c.Value</span>
+            <span class="stat-title">@c.Title</span>
+            <span class="stat-hint">@c.Hint</span>
+        </a>
+    }
+</div>
+
+@if (myWorks is { Count: > 0 })
+{
+    var open = myWorks.Where(w => w.ReleasedAtUtc is null && !WorkflowRules.IsFinal(w.Status)).ToList();
+    if (open.Count > 0)
+    {
+        <div class="alert alert-light border d-flex justify-content-between align-items-center">
+            <span>@Ui.Icon("briefcase") Size atanmış <b>@open.Count</b> açık iş var.</span>
+            <a href="/islerim" class="btn btn-sm btn-primary">İşlerim</a>
+        </div>
+    }
+}
+
+<div class="row g-3 mt-1">
+    <div class="col-lg-5">
+        <section class="card h-100">
+            <div class="card-header">Durumlara göre işler</div>
+            <div class="card-body">
+                @if (Model.ByStatus.Count == 0)
+                {
+                    <div class="empty">Henüz iş yok.</div>
+                }
+                @foreach (var s in Model.ByStatus)
+                {
+                    <a class="bar-row" href="/isler?status=@s.Status">
+                        <span class="bar-label">@TrNames.Of(s.Status)</span>
+                        <span class="bar-track"><span class="bar-fill @TrNames.Badge(s.Status)" style="width:@(Math.Max(3, s.Count * 100 / max))%"></span></span>
+                        <span class="bar-value">@s.Count</span>
+                    </a>
+                }
+            </div>
+        </section>
+    </div>
+    <div class="col-lg-7">
+        <section class="card h-100">
+            <div class="card-header">Son işlem hareketleri</div>
+            <ul class="list-group list-group-flush activity">
+                @if (Model.Activity.Count == 0)
+                {
+                    <li class="list-group-item text-secondary">Henüz hareket yok.</li>
+                }
+                @foreach (var a in Model.Activity)
+                {
+                    <li class="list-group-item">
+                        <div class="small text-secondary">@TrTime.Format(a.AtUtc) · @a.ActorName</div>
+                        <div>@if (a.WorkOrderId is int wid) { <a href="/isler/@wid" class="fw-semibold">@a.WorkNumber</a> } @a.Summary</div>
+                    </li>
+                }
+            </ul>
+        </section>
+    </div>
+</div>
+
+<section class="card mt-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Son güncellenen işler</span>
+        <a href="/isler" class="small">Tüm işler ›</a>
+    </div>
+    <div class="card-body p-0">
+        <partial name="_WorkTable" model="Model.RecentWorks" />
+    </div>
+</section>

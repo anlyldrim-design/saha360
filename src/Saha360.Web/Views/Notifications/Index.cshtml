@@ -1,0 +1,36 @@
+@model PagedResult<NotificationItem>
+@{
+    ViewData["Title"] = "Bildirimler";
+    var onlyUnread = ViewData["OnlyUnread"] as bool? ?? false;
+}
+<div class="page-head">
+    <h1 class="page-title">Bildirimler</h1>
+    <form method="post" action="/bildirimler/tumu-okundu"><button class="btn btn-outline-secondary" type="submit">@Ui.Icon("check") Tümünü okundu işaretle</button></form>
+</div>
+<div class="chip-row mb-3">
+    <a class="chip @(onlyUnread ? "" : "active")" href="/bildirimler">Tümü</a>
+    <a class="chip @(onlyUnread ? "active" : "")" href="/bildirimler?okunmamis=true">Okunmamış</a>
+</div>
+@if (Model.Items.Count == 0)
+{
+    <div class="empty card card-body">@Ui.Icon("bell", "big") <div>Bildirim yok.</div></div>
+}
+else
+{
+    <div class="list-group">
+        @foreach (var n in Model.Items)
+        {
+            <form method="post" action="/bildirimler/@n.Id/ac">
+                <button type="submit" class="list-group-item list-group-item-action notif-row @(n.IsRead ? "" : "unread")">
+                    <div class="d-flex justify-content-between gap-2">
+                        <span class="fw-semibold">@(n.IsRead ? "" : "● ")@n.Title</span>
+                        <span class="small text-secondary text-nowrap">@TrTime.Format(n.CreatedAtUtc)</span>
+                    </div>
+                    <div class="small">@n.Message</div>
+                    <span class="visually-hidden">@(n.IsRead ? "Okundu" : "Okunmadı")</span>
+                </button>
+            </form>
+        }
+    </div>
+    <partial name="_Pager" model="(Model.Page, Model.TotalPages, Model.Total)" />
+}

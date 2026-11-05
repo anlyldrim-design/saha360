@@ -1,0 +1,172 @@
+@model PoolViewModel
+@using System.Text.Json
+@{
+    ViewData["Title"] = Model.Work is null ? "Personel Havuzu" : $"Ekip planla · {Model.Work.Work.WorkNumber}";
+    var q = Model.Query;
+    var w = Model.Work;
+    var availableCount = Model.Pool.Count(p => p.State == PoolState.Available);
+    var json = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    // Ekranda açık ekip alanları: işte kayıtlı alanlar + atanmış kişilerin alanları. Hiç yoksa yalnız lider rolü (ör. Şef).
+    var activeTeam = w?.Assignments.Where(a => a.ReleasedAtUtc is null).ToList() ?? [];
+    var shownGroups = (w?.TeamGroupRoleIds ?? []).Concat(activeTeam.Select(a => a.JobRoleId)).Distinct().ToList();
+    if (w is not null && shownGroups.Count == 0)
+        shownGroups = Model.Groups.Where(g => g.IsActive && g.IsLeadRole).Select(g => g.Id).ToList();
+    var data = new
+    {
+        shownGroups,
+        workId = w?.Work.Id,
+        // Metin olarak: 18 haneli sayı JavaScript'te yuvarlanır ve sürüm kontrolü yanlış alarm verir.
+        version = w?.Work.UpdatedAtUtc.Ticks.ToString(),
+        status = w?.Work.Status.ToString(),
+        isDraft = w?.Work.Status is WorkStatus.Draft or WorkStatus.AwaitingAssignment,
+        hasSupervisor = w?.Work.ResponsibleSupervisorEmployeeId is not null,
+        groups = Model.Groups.Select(g => new { id = g.Id, name = g.Name, lead = g.IsLeadRole, open = g.IsOpenToAll, active = g.IsActive }),
+        pool = Model.Pool.Select(p => new { id = p.EmployeeId, name = p.FullName, no = p.EmployeeNumber, roleId = p.JobRoleId, role = p.JobRoleName,
+            team = p.TeamName, state = p.State.ToString(), reason = p.Reason, account = p.HasAccount }),
+        team = activeTeam.Select(a => new { id = a.EmployeeId, name = a.EmployeeName, roleId = a.JobRoleId, titleId = a.EmployeeTitleId,
+            status = TrNames.Of(a.Status), locked = a.Status == AssignmentStatus.Working, note = a.TaskNote })
+    };
+    var stateNames = new Dictionary<PoolState, string> { [PoolState.Available] = "Müsait", [PoolState.Busy] = "Atanmış", [PoolState.OnLeave] = "İzinli", [PoolState.Inactive] = "Pasif" };
+}
+<div class="page-head">
+    <div>
+        <h1 class="page-title">@(w is null ? "Personel Havuzu" : "Ekip Planlama")</h1>
+        <p class="text-secondary mb-0">
+            @if (w is null)
+            {
+                <span>Seçili zaman: <b>@TrTime.Range(Model.FromUtc, Model.ToUtc)</b> · Müsait: <b>@availableCount</b> kişi</span>
+            }
+            else
+            {
+                <span>Personeli sürükleyip kendi unvanının alanına bırakın veya kartındaki <b>İşe ekle</b> düğmesini kullanın.
+                    Bu işe gereken alanları <b>+ Ekip alanı ekle</b> ile seçin. Değişiklikler kaydedene kadar taslaktır.</span>
+            }
+        </p>
+    </div>
+    @if (Model.Works.Count > 0 || w is not null)
+    {
+    <form method="get" action="/havuz" class="d-flex gap-2 align-items-center">
+        <label class="visually-hidden" for="workPick">Planlanacak iş</label>
+        <select id="workPick" name="isId" class="form-select" onchange="this.form.submit()">
+            <option value="">— Planlanacak işi seçin —</option>
+            @foreach (var o in Model.Works)
+            {
+                <option value="@o.Id" selected="@(w?.Work.Id == o.Id)">@o.WorkNumber · @o.Title (@TrNames.Of(o.Status), @TrTime.Format(o.StartUtc, "dd.MM HH:mm"))</option>
+            }
+        </select>
+    </form>
+    }
+</div>
+
+<div class="pool-layout">
+    @* ─────────── Sol panel: personel havuzu ─────────── *@
+    <section class="pool-panel card" aria-labelledby="poolTitle">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span id="poolTitle">Personel havuzu</span>
+            <span class="small text-secondary" id="poolCount">@availableCount müsait / @Model.Pool.Count kişi</span>
+        </div>
+        <form method="get" action="/havuz" class="card-body border-bottom pool-filters">
+            @if (w is not null) { <input type="hidden" name="isId" value="@w.Work.Id" /> }
+            <div class="row g-2">
+                <div class="col-12">
+                    <label class="visually-hidden" for="pq">Ara</label>
+                    <input id="pq" name="q" value="@q.Q" class="form-control form-control-sm" placeholder="Ad, soyad veya sicil no" />
+                </div>
+                @if (Model.Lookups.Units.Count > 1)
+                {
+                    <div class="col-12">
+                        <select name="unitId" class="form-select form-select-sm" aria-label="Birim"><option value="">Tüm birimler</option>
+                            @foreach (var o in Model.Lookups.Units) { <option value="@o.Id" selected="@(q.UnitId == o.Id)">@o.Name</option> }
+                        </select>
+                    </div>
+                }
+                <div class="col-6">
+                    <select name="teamId" class="form-select form-select-sm" aria-label="Ekip"><option value="">Tüm ekipler</option>
+                        @foreach (var o in Model.Lookups.Teams) { <option value="@o.Id" selected="@(q.TeamId == o.Id)">@o.Name</option> }
+                    </select>
+                </div>
+                <div class="col-6">
+                    <select name="jobRoleId" class="form-select form-select-sm" aria-label="Unvan"><option value="">Tüm unvanlar</option>
+                        @foreach (var o in Model.Lookups.JobRoles) { <option value="@o.Id" selected="@(q.JobRoleId == o.Id)">@o.Name</option> }
+                    </select>
+                </div>
+                <div class="col-6">
+                    <select name="supervisorId" class="form-select form-select-sm" aria-label="Şef"><option value="">Tüm şefler</option>
+                        @foreach (var o in Model.Lookups.Supervisors) { <option value="@o.Id" selected="@(q.SupervisorId == o.Id)">@o.Name</option> }
+                    </select>
+                </div>
+                <div class="col-6">
+                    <select name="state" class="form-select form-select-sm" aria-label="Müsaitlik"><option value="">Tüm durumlar</option>
+                        @foreach (var s in Enum.GetValues<PoolState>()) { <option value="@s" selected="@(q.State == s)">@stateNames[s]</option> }
+                    </select>
+                </div>
+                @if (w is null)
+                {
+                    <div class="col-6"><label class="form-label small mb-0" for="pfrom">Başlangıç</label><input id="pfrom" type="datetime-local" name="fromLocal" class="form-control form-control-sm" value="@TrTime.Input(Model.FromUtc)" /></div>
+                    <div class="col-6"><label class="form-label small mb-0" for="pto">Bitiş</label><input id="pto" type="datetime-local" name="toLocal" class="form-control form-control-sm" value="@TrTime.Input(Model.ToUtc)" /></div>
+                }
+                <div class="col-12 d-flex justify-content-between align-items-center">
+                    <div class="form-check form-check-sm mb-0"><input class="form-check-input" type="checkbox" name="includeInactive" value="true" id="pinact" checked="@q.IncludeInactive" /><label class="form-check-label small" for="pinact">Pasifleri de göster</label></div>
+                    <button class="btn btn-sm btn-outline-primary" type="submit">@Ui.Icon("filter") Süz</button>
+                </div>
+            </div>
+        </form>
+        <div class="pool-list" id="poolList" aria-live="polite">
+            @* İstemci tarafında doldurulur; JavaScript kapalıysa aşağıdaki liste görünür. *@
+            <noscript>
+                <ul class="list-group list-group-flush">
+                    @foreach (var p in Model.Pool) { <li class="list-group-item">@p.FullName · @stateNames[p.State] @p.Reason</li> }
+                </ul>
+            </noscript>
+        </div>
+    </section>
+
+    @* ─────────── Sağ panel: seçili iş ve ekip taslağı ─────────── *@
+    <section class="plan-panel card" aria-labelledby="planTitle">
+        @if (w is null)
+        {
+            <div class="card-body empty">
+                @Ui.Icon("calendar", "big")
+                <div id="planTitle" class="fw-semibold">Planlamak için yukarıdan bir iş seçin</div>
+                <div class="small text-secondary">Havuz, seçili zaman aralığında kimin müsait olduğunu gösterir. Müsaitlik kayıtlı atamalardan ve izinlerden hesaplanır.</div>
+                <a href="/isler/yeni" class="btn btn-primary btn-sm mt-2">@Ui.Icon("plus") Yeni iş oluştur</a>
+            </div>
+        }
+        else
+        {
+            <div class="card-header">
+                <div class="d-flex flex-wrap gap-2 align-items-center">
+                    <a href="/isler/@w.Work.Id" class="fw-semibold" id="planTitle">@w.Work.WorkNumber</a> @Ui.Status(w.Work.Status) @Ui.Priority(w.Work.Priority)
+                </div>
+                <div class="fw-semibold">@w.Work.Title</div>
+                <div class="small text-secondary">@Ui.Icon("calendar") @TrTime.Range(w.Work.PlannedStartAtUtc, w.Work.PlannedEndAtUtc) · @Ui.Icon("pin") @(w.LocationName ?? w.Work.LocationText ?? "—") · Şef: @(w.SupervisorName ?? "seçilmedi")</div>
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between small mb-2">
+                    <span>Ekipte: <b id="teamCount">0</b> kişi</span>
+                    <span id="dirtyFlag" class="text-warning fw-semibold" hidden>● Kaydedilmemiş değişiklik var</span>
+                </div>
+                <div id="planWarnings" class="small"></div>
+                <div class="groups" id="groups"></div>
+            </div>
+            <div class="card-footer sticky-actions">
+                @if (data.isDraft)
+                {
+                    <button class="btn btn-outline-primary" type="button" data-save="false">Taslağı kaydet</button>
+                    <button class="btn btn-primary" type="button" data-save="true">@Ui.Icon("send") Kaydet ve personele gönder</button>
+                }
+                else
+                {
+                    <button class="btn btn-primary" type="button" data-save="false">@Ui.Icon("check") Atamaları kaydet</button>
+                }
+                <a href="/isler/@w.Work.Id" class="btn btn-outline-secondary">Vazgeç</a>
+            </div>
+        }
+    </section>
+</div>
+
+<script type="application/json" id="poolData">@Html.Raw(JsonSerializer.Serialize(data, json).Replace("<", "\\u003c"))</script>
+
+@section Scripts {
+    <script src="~/js/pool.js" asp-append-version="true"></script>
+}

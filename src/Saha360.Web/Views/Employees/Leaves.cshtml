@@ -1,0 +1,35 @@
+@model List<EmployeeAvailability>
+@{
+    ViewData["Title"] = "Müsaitlik / İzin Durumları";
+    var now = DateTime.UtcNow;
+}
+<div class="page-head">
+    <div>
+        <h1 class="page-title">Müsaitlik / İzin Durumları</h1>
+        <p class="text-secondary mb-0">Şu an ve ileride izinli, raporlu veya müsait olmayan personel. @((ViewData["CanManage"] as bool? ?? false) ? "Yeni kayıt personel kartının \"İzin / müsaitlik\" bölümünden eklenir." : "İzin kaydını birim yöneticisi veya sistem yöneticisi girer.")</p>
+    </div>
+</div>
+<div class="card"><div class="card-body p-0">
+    @if (Model.Count == 0)
+    {
+        <div class="empty">Kayıtlı izin yok.</div>
+    }
+    else
+    {
+        <div class="table-responsive"><table class="table align-middle mb-0">
+            <thead><tr><th>Personel</th><th>Tür</th><th>Dönem</th><th>Durum</th><th>Not</th></tr></thead>
+            <tbody>
+                @foreach (var a in Model)
+                {
+                    <tr>
+                        <td><a href="/personel/@a.EmployeeId#izinler">@a.Employee.FullName</a></td>
+                        <td><span class="badge text-bg-warning">@TrNames.Of(a.Type)</span></td>
+                        <td class="small">@TrTime.Range(a.StartAtUtc, a.EndAtUtc)</td>
+                        <td>@(a.StartAtUtc <= now ? "Şu an" : "Gelecek")</td>
+                        <td class="small">@a.Note</td>
+                    </tr>
+                }
+            </tbody>
+        </table></div>
+    }
+</div></div>

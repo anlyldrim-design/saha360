@@ -1,0 +1,67 @@
+@model UserFormViewModel
+@{
+    var isNew = Model.Id is null;
+    var i = Model.Input;
+    ViewData["Title"] = isNew ? "Yeni kullanıcı" : i.FullName;
+}
+<nav class="small mb-1"><a href="/kullanicilar">Kullanıcılar</a> › @(isNew ? "Yeni" : i.FullName)</nav>
+<h1 class="page-title">@(isNew ? "Yeni kullanıcı" : i.FullName)</h1>
+<form method="post" action="@(isNew ? "/kullanicilar/yeni" : $"/kullanicilar/{Model.Id}")" class="card" style="max-width:760px" autocomplete="off">
+    <div class="card-body row g-3">
+        <div asp-validation-summary="All" class="col-12 text-danger small"></div>
+        <div class="col-md-6"><label class="form-label" for="FullName">Ad soyad *</label><input id="FullName" name="FullName" value="@i.FullName" class="form-control" required /></div>
+        <div class="col-md-6"><label class="form-label" for="UserName">Kullanıcı adı *</label><input id="UserName" name="UserName" value="@i.UserName" class="form-control" required autocomplete="off" /></div>
+        <div class="col-md-6"><label class="form-label" for="Email">E-posta</label><input id="Email" name="Email" type="email" value="@i.Email" class="form-control" /></div>
+        <div class="col-md-6"><label class="form-label" for="NewPassword">@(isNew ? "İlk parola *" : "Yeni parola (sıfırlamak için)")</label>
+            <input id="NewPassword" name="NewPassword" type="password" class="form-control" autocomplete="new-password" minlength="8" required="@isNew" />
+            <div class="form-text">En az 8 karakter ve bir rakam. Kullanıcı ilk girişten sonra değiştirmeli.</div></div>
+        <div class="col-12">
+            <fieldset>
+                <legend class="form-label">Sistem rolleri *</legend>
+                <div class="row">
+                    @foreach (var r in SystemRoles.All)
+                    {
+                        <div class="col-md-4"><div class="form-check"><input class="form-check-input" type="checkbox" name="Roles" value="@r" id="role-@r" checked="@i.Roles.Contains(r)" /><label class="form-check-label" for="role-@r">@SystemRoles.DisplayName(r)</label></div></div>
+                    }
+                </div>
+            </fieldset>
+        </div>
+        <div class="col-md-6"><label class="form-label" for="EmployeeId">Bağlı personel kaydı</label><select id="EmployeeId" name="EmployeeId" class="form-select" data-show-when="-1" data-show-target="#newEmployee">
+            <option value="">— Yok —</option>
+            <option value="@UserInput.NewEmployee" selected="@(i.EmployeeId == UserInput.NewEmployee)">+ Personel listede yok: yeni personel kaydı oluştur</option>
+            @foreach (var o in Model.Employees) { <option value="@o.Id" selected="@(i.EmployeeId == o.Id)">@o.Name</option> }</select>
+            <div class="form-text">Personel ve Şef rolündekiler için zorunlu: "İşlerim" ve onay bu eşleşmeyle çalışır.</div></div>
+        <div class="col-md-6"><label class="form-label" for="OrganizationUnitId">Birim kapsamı</label><select id="OrganizationUnitId" name="OrganizationUnitId" class="form-select"><option value="">— Personel kaydındaki birim —</option>
+            @foreach (var o in Model.Units) { <option value="@o.Id" selected="@(i.OrganizationUnitId == o.Id)">@o.Name</option> }</select>
+            <div class="form-text">Kişinin yetkileri yalnız bu birimde geçerlidir. Boş bırakılırsa bağlı personel kaydının birimi kullanılır.</div>
+            @if (User.IsInRole(SystemRoles.SystemAdmin))
+            {
+                @* Sıra önemli: işaret kutusu gizli "false" alanından ÖNCE gelmeli. *@
+                <div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="AllUnits" name="AllUnits" value="true" checked="@i.AllUnits" /><label class="form-check-label" for="AllUnits">Tüm birimleri görsün (genel müdürlük, merkez planlama vb.)</label></div>
+                <input type="hidden" name="AllUnits" value="false" />
+            }
+            </div>
+        <div class="col-12" id="newEmployee" hidden="@(i.EmployeeId != UserInput.NewEmployee)">
+            <div class="help-box">
+                <div class="fw-semibold mb-2">Yeni personel kaydı (ad soyad yukarıdan alınır)</div>
+                <div class="row g-2">
+                    <div class="col-md-5"><label class="form-label small" for="NewEmployeeUnitId">Birimi *</label>
+                        <select id="NewEmployeeUnitId" name="NewEmployeeUnitId" class="form-select"><option value="">Seçin</option>
+                            @foreach (var o in Model.Units) { <option value="@o.Id" selected="@(i.NewEmployeeUnitId == o.Id)">@o.Name</option> }</select></div>
+                    <div class="col-md-4"><label class="form-label small" for="NewEmployeeJobRoleId">Unvanı</label>
+                        <select id="NewEmployeeJobRoleId" name="NewEmployeeJobRoleId" class="form-select"><option value="">—</option>
+                            @foreach (var o in Model.JobRoles) { <option value="@o.Id" selected="@(i.NewEmployeeJobRoleId == o.Id)">@o.Name</option> }</select></div>
+                    <div class="col-md-3"><label class="form-label small" for="NewEmployeeNumber">Sicil no</label>
+                        <input id="NewEmployeeNumber" name="NewEmployeeNumber" value="@i.NewEmployeeNumber" class="form-control" maxlength="30" /></div>
+                </div>
+                <div class="form-text">Ekip, telefon gibi diğer bilgileri sonra Personel ekranından ekleyebilirsiniz.</div>
+            </div>
+        </div>
+        <div class="col-12">
+            @* Sıra önemli: işaret kutusu gizli "false" alanından ÖNCE gelmeli; sunucu ilk değeri okur. *@
+            <div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="IsActive" name="IsActive" value="true" checked="@i.IsActive" /><label class="form-check-label" for="IsActive">Aktif (pasif kullanıcı giriş yapamaz; açık oturumu 1 dakika içinde düşer)</label></div>
+            <input type="hidden" name="IsActive" value="false" />
+        </div>
+    </div>
+    <div class="card-footer d-flex gap-2"><button class="btn btn-primary" type="submit">Kaydet</button><a href="/kullanicilar" class="btn btn-outline-secondary">Vazgeç</a></div>
+</form>

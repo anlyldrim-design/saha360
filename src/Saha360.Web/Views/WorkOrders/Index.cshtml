@@ -1,0 +1,143 @@
+@model WorkListViewModel
+@inject CurrentUser Current
+@{
+    var me = await Current.GetAsync();
+    var q = Model.Query;
+    var title = q.View switch
+    {
+        "onay" => "Onay Bekleyen İşler",
+        "iade" => "Reddedilen / İade Edilen İşler",
+        "tamamlanan" => "Tamamlanan İşler",
+        "atama" => "Ataması Bekleyen İşler",
+        "devam" => "Devam Eden İşler",
+        "bugun" => "Bugün Planlanan İşler",
+        "aktif" => q.Overdue ? "Geciken İşler" : "Aktif İşler",
+        "onayimda" => "Onayımı Bekleyen İşler",
+        _ => "Tüm İşler"
+    };
+    ViewData["Title"] = title;
+    var filtersOpen = q.Status is not null || q.UnitId is not null || q.SupervisorId is not null || q.EmployeeId is not null || q.CategoryId is not null
+                      || q.Priority is not null || q.LocationId is not null || q.From is not null || q.To is not null || q.Overdue || q.HasMaterials;
+}
+<div class="page-head">
+    <div>
+        <h1 class="page-title">@title</h1>
+        @if (!string.IsNullOrWhiteSpace(q.Q)) { <p class="text-secondary mb-0">“@q.Q” araması</p> }
+    </div>
+    <div class="d-flex gap-2">
+        @if (me.CanExport)
+        {
+            <a class="btn btn-outline-secondary" href="/isler/disa-aktar@(Context.Request.QueryString)">@Ui.Icon("download") CSV</a>
+        }
+        @if (me.CanCreateWork) { <a class="btn btn-primary" href="/isler/yeni">@Ui.Icon("plus") Yeni iş</a> }
+    </div>
+</div>
+
+<div class="chip-row mb-2" role="navigation" aria-label="Hazır görünümler">
+    @foreach (var (v, label) in new[] { ("", "Tümü"), ("aktif", "Aktif"), ("bugun", "Bugün"), ("atama", "Atama bekleyen"), ("devam", "Devam eden"), ("onay", "Onay bekleyen"), ("iade", "Reddedilen / iade"), ("tamamlanan", "Tamamlanan") })
+    {
+        <a class="chip @((q.View ?? "") == v && !q.Overdue ? "active" : "")" href="/isler@(v == "" ? "" : "?view=" + v)">@label</a>
+    }
+    <a class="chip @(q.Overdue ? "active" : "")" href="/isler?view=aktif&overdue=true">⏱ Geciken</a>
+</div>
+
+<form method="get" action="/isler" class="card filter-card mb-3">
+    <input type="hidden" name="view" value="@q.View" />
+    <div class="card-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-5">
+                <label class="form-label small" for="fq">Ara</label>
+                <input id="fq" name="q" value="@q.Q" class="form-control" placeholder="İş no, başlık veya adres" />
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small" for="fs">Durum</label>
+                <select id="fs" name="status" class="form-select">
+                    <option value="">Tümü</option>
+                    @foreach (var s in Enum.GetValues<WorkStatus>())
+                    {
+                        <option value="@s" selected="@(q.Status == s)">@TrNames.Of(s)</option>
+                    }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small" for="fsort">Sıralama</label>
+                <select id="fsort" name="sort" class="form-select">
+                    <option value="">Son güncelleme</option>
+                    <option value="baslangic" selected="@(q.Sort == "baslangic")">Başlangıç (yakın)</option>
+                    <option value="baslangic_desc" selected="@(q.Sort == "baslangic_desc")">Başlangıç (uzak)</option>
+                    <option value="oncelik" selected="@(q.Sort == "oncelik")">Öncelik</option>
+                    <option value="numara" selected="@(q.Sort == "numara")">İş no</option>
+                    <option value="durum" selected="@(q.Sort == "durum")">Durum</option>
+                </select>
+            </div>
+            <div class="col-md-2 d-flex gap-2">
+                <button class="btn btn-primary flex-fill" type="submit">@Ui.Icon("search") Uygula</button>
+                <button class="btn btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#moreFilters" aria-expanded="@(filtersOpen ? "true" : "false")" aria-controls="moreFilters" title="Diğer süzgeçler">@Ui.Icon("filter")</button>
+            </div>
+        </div>
+        <div class="collapse @(filtersOpen ? "show" : "")" id="moreFilters">
+            <div class="row g-2 mt-1">
+                <div class="col-6 col-md-3">
+                    <label class="form-label small" for="ffrom">Planlanan (başlangıç)</label>
+                    <input id="ffrom" type="date" name="from" value="@q.From?.ToString("yyyy-MM-dd")" class="form-control" />
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="form-label small" for="fto">Planlanan (bitiş)</label>
+                    <input id="fto" type="date" name="to" value="@q.To?.ToString("yyyy-MM-dd")" class="form-control" />
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="form-label small" for="funit">Birim</label>
+                    <select id="funit" name="unitId" class="form-select"><option value="">Tümü</option>
+                        @foreach (var o in Model.Lookups.Units) { <option value="@o.Id" selected="@(q.UnitId == o.Id)">@o.Name</option> }
+                    </select>
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="form-label small" for="fsup">Şef</label>
+                    <select id="fsup" name="supervisorId" class="form-select"><option value="">Tümü</option>
+                        @foreach (var o in Model.Lookups.Supervisors) { <option value="@o.Id" selected="@(q.SupervisorId == o.Id)">@o.Name</option> }
+                    </select>
+                </div>
+                @if (Model.Employees.Count > 0)
+                {
+                    <div class="col-6 col-md-3">
+                        <label class="form-label small" for="femp">Personel</label>
+                        <select id="femp" name="employeeId" class="form-select"><option value="">Tümü</option>
+                            @foreach (var o in Model.Employees) { <option value="@o.Id" selected="@(q.EmployeeId == o.Id)">@o.Name</option> }
+                        </select>
+                    </div>
+                }
+                <div class="col-6 col-md-3">
+                    <label class="form-label small" for="fcat">Kategori</label>
+                    <select id="fcat" name="categoryId" class="form-select"><option value="">Tümü</option>
+                        @foreach (var o in Model.Lookups.Categories) { <option value="@o.Id" selected="@(q.CategoryId == o.Id)">@o.Name</option> }
+                    </select>
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="form-label small" for="fpri">Öncelik</label>
+                    <select id="fpri" name="priority" class="form-select"><option value="">Tümü</option>
+                        @foreach (var p in Enum.GetValues<WorkPriority>()) { <option value="@p" selected="@(q.Priority == p)">@TrNames.Of(p)</option> }
+                    </select>
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="form-label small" for="floc">Bölge</label>
+                    <select id="floc" name="locationId" class="form-select"><option value="">Tümü</option>
+                        @foreach (var o in Model.Lookups.Locations) { <option value="@o.Id" selected="@(q.LocationId == o.Id)">@o.Name</option> }
+                    </select>
+                </div>
+                <div class="col-md-6 d-flex gap-3 align-items-center pt-2">
+                    <div class="form-check"><input class="form-check-input" type="checkbox" name="overdue" value="true" id="fover" checked="@q.Overdue" /><label class="form-check-label" for="fover">Yalnız gecikenler</label></div>
+                    <div class="form-check"><input class="form-check-input" type="checkbox" name="hasMaterials" value="true" id="fmat" checked="@q.HasMaterials" /><label class="form-check-label" for="fmat">Malzeme kullanılanlar</label></div>
+                    <a href="/isler" class="small ms-auto">Süzgeçleri temizle</a>
+                </div>
+            </div>
+            <p class="small text-secondary mt-2 mb-0">Tarih süzgeci işin planlanan zaman aralığına uygulanır.</p>
+        </div>
+    </div>
+</form>
+
+<div class="card">
+    <div class="card-body p-0">
+        <partial name="_WorkTable" model="Model.Result.Items" />
+    </div>
+</div>
+<partial name="_Pager" model="(Model.Result.Page, Model.Result.TotalPages, Model.Result.Total)" />

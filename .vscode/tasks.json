@@ -1,0 +1,26 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/Saha360.Web/Saha360.Web.csproj",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "test",
+      "command": "dotnet",
+      "type": "process",
+      "args": ["test", "${workspaceFolder}/tests/Saha360.Tests/Saha360.Tests.csproj"],
+      "group": "test",
+      "problemMatcher": "$msCompile"
+    }
+  ]
+}

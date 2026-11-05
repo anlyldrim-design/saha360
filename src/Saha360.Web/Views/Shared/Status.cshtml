@@ -1,0 +1,10 @@
+@{
+    var code = ViewData["Code"] as int? ?? 500;
+    ViewData["Title"] = code switch { 404 => "Bulunamadı", 403 => "Yetkisiz", _ => "Hata" };
+}
+<div class="status-page">
+    <div class="status-code">@code</div>
+    <h1 class="h4">@ViewData["Title"]</h1>
+    <p class="text-secondary">@ViewData["Message"]</p>
+    <a href="/" class="btn btn-primary">@Ui.Icon("home") Ana sayfaya dön</a>
+</div>

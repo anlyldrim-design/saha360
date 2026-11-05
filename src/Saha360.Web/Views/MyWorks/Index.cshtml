@@ -1,0 +1,70 @@
+@model List<MyWorkCard>
+@{
+    ViewData["Title"] = "İşlerim";
+    var active = Model.Where(c => c.ReleasedAtUtc is null).ToList();
+    var sections = new List<(string Title, string Hint, List<MyWorkCard> Items)>
+    {
+        ("Kabul bekleyen işler", "Yeni atandı; kabul veya gerekçeyle ret bekleniyor", active.Where(c => c.MyStatus == AssignmentStatus.Assigned).ToList()),
+        ("İade edilen işler", "Şef düzeltme istedi", active.Where(c => c.Status == WorkStatus.ReturnedBySupervisor).ToList()),
+        ("Üzerinde çalıştığım işler", "Kabul ettiğiniz ve devam eden işler",
+            active.Where(c => c.MyStatus is AssignmentStatus.Accepted or AssignmentStatus.Working
+                              && c.Status is WorkStatus.Planned or WorkStatus.InProgress or WorkStatus.AwaitingAcceptance).ToList()),
+        ("Tamamlanma için gönderdiklerim", "Şef onayı bekleniyor", active.Where(c => c.Status == WorkStatus.CompletionApprovalPending).ToList()),
+        ("Tamamlanan işler (son 60 gün)", "", Model.Where(c => c.Status == WorkStatus.Completed).ToList()),
+        ("Reddettiğim / çıkarıldığım işler", "", Model.Where(c => c.ReleasedAtUtc is not null && c.Status != WorkStatus.Completed).ToList()),
+    };
+}
+<div class="page-head">
+    <div>
+        <h1 class="page-title">İşlerim</h1>
+        <p class="text-secondary mb-0">Size atanan işler. Bir işe dokunarak ayrıntı, fotoğraf, not ve malzeme ekleyebilirsiniz.</p>
+    </div>
+</div>
+
+@if (Model.Count == 0)
+{
+    <div class="empty card card-body">@Ui.Icon("briefcase", "big") <div>Şu an size atanmış iş yok.</div></div>
+}
+
+@foreach (var s in sections.Where(s => s.Items.Count > 0))
+{
+    <h2 class="section-title">@s.Title <span class="badge text-bg-light border">@s.Items.Count</span> @if (s.Hint != "") { <small class="text-secondary fw-normal">· @s.Hint</small> }</h2>
+    <div class="mywork-grid">
+        @foreach (var c in s.Items)
+        {
+            <article class="card mywork">
+                <a href="/isler/@c.Id" class="stretched-link-area">
+                    <div class="d-flex flex-wrap gap-1 align-items-center mb-1">
+                        <span class="work-no">@c.WorkNumber</span> @Ui.Status(c.Status) @Ui.Priority(c.Priority) @Ui.Overdue(c.IsOverdue)
+                    </div>
+                    <h3 class="h6 mb-1">@c.Title</h3>
+                    <div class="small">@Ui.Icon("calendar") @TrTime.Range(c.PlannedStartAtUtc, c.PlannedEndAtUtc)</div>
+                    <div class="small">@Ui.Icon("pin") @(c.Location ?? "Konum belirtilmemiş")</div>
+                    <div class="small">@Ui.Icon("flag") Şef: @(c.SupervisorName ?? "—") · Göreviniz: <b>@c.RoleName</b></div>
+                    @if (!string.IsNullOrWhiteSpace(c.Instructions)) { <div class="instruction small mt-2">@c.Instructions</div> }
+                </a>
+                @if (c.ReleasedAtUtc is null)
+                {
+                    <div class="mywork-actions">
+                        @if (c.MyStatus == AssignmentStatus.Assigned)
+                        {
+                            <form method="post" action="/isler/@c.Id/kabul" class="flex-fill"
+                                  data-confirm="@(string.IsNullOrWhiteSpace(c.Instructions) ? "" : "Saha talimatını okudunuz mu? Kabul ederek onaylamış olursunuz.")">
+                                <button class="btn btn-success w-100" type="submit">@Ui.Icon("check") Kabul et</button>
+                            </form>
+                            <a href="/isler/@c.Id#reddet" class="btn btn-outline-danger flex-fill">@Ui.Icon("x") Reddet</a>
+                        }
+                        else if (c.Status is WorkStatus.Planned or WorkStatus.ReturnedBySupervisor || (c.Status == WorkStatus.InProgress && c.MyStatus == AssignmentStatus.Accepted))
+                        {
+                            <form method="post" action="/isler/@c.Id/basla" class="flex-fill"><button class="btn btn-primary w-100" type="submit">@Ui.Icon("play") Çalışmaya başladım</button></form>
+                        }
+                        @if (c.MyStatus != AssignmentStatus.Assigned && c.Status is WorkStatus.InProgress or WorkStatus.ReturnedBySupervisor)
+                        {
+                            <a href="/isler/@c.Id#tamamla" class="btn btn-success flex-fill">@Ui.Icon("send") Tamamlandı</a>
+                        }
+                    </div>
+                }
+            </article>
+        }
+    </div>
+}

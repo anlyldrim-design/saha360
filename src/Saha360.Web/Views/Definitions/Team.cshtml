@@ -1,0 +1,126 @@
+@model DefinitionService.TeamDetail
+@inject CurrentUser Current
+@{
+    var t = Model.Team;
+    ViewData["Title"] = t.Name;
+    var canEdit = ViewData["CanEdit"] as bool? ?? false;
+    var lk = (Lookups)ViewData["Lookups"]!;
+    var all = (List<Option>)ViewData["AllEmployees"]!;
+    var me = await Current.GetAsync();
+}
+<nav class="small mb-1"><a href="/tanimlar/ekipler">Ekipler ve şefler</a> › @t.Name</nav>
+<div class="page-head">
+    <div>
+        <h1 class="page-title">@t.Name @if (!t.IsActive) { <span class="badge text-bg-secondary align-middle">Pasif</span> }</h1>
+        <p class="text-secondary mb-0">@t.OrganizationUnit.Name · Şef: <b>@(t.SupervisorEmployee?.FullName ?? "seçilmedi")</b> · @Model.Members.Count üye</p>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-7">
+        <section class="card mb-3">
+            <div class="card-header">Üyeler (@Model.Members.Count)</div>
+            @if (Model.Members.Count == 0)
+            {
+                <div class="card-body empty">@Ui.Icon("users", "big") <div>Bu ekipte henüz kimse yok.@(canEdit ? " Sağdaki listeden personel işaretleyip ekleyin." : "")</div></div>
+            }
+            else
+            {
+                <div class="table-responsive"><table class="table align-middle mb-0">
+                    <thead><tr><th>Personel</th><th>Unvan</th><th>Bağlı şef</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var m in Model.Members)
+                        {
+                            <tr class="@(m.IsActive ? "" : "text-secondary")">
+                                <td><a href="/personel/@m.Id">@m.Name</a> @if (m.IsTeamSupervisor) { <span class="badge text-bg-primary">Ekip şefi</span> }
+                                    @if (!m.IsActive) { <span class="badge text-bg-secondary">Pasif</span> }
+                                    @if (m.EmployeeNumber is not null && me.CanSeeSensitive) { <div class="small text-secondary">@m.EmployeeNumber</div> }</td>
+                                <td>@(m.Title ?? "—")</td>
+                                <td class="small">@(m.Supervisor ?? "—")</td>
+                                <td class="text-end">
+                                    @if (canEdit && !m.IsTeamSupervisor)
+                                    {
+                                        <form method="post" action="/tanimlar/ekipler/@t.Id/uyeler/@m.Id/cikar" data-confirm="@m.Name ekipten çıkarılsın mı?">
+                                            <button class="btn btn-sm btn-outline-danger" type="submit">Çıkar</button>
+                                        </form>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table></div>
+            }
+        </section>
+
+        @if (canEdit)
+        {
+            <form method="post" action="/tanimlar/ekipler" class="card">
+                <div class="card-header">Ekip bilgileri ve şef</div>
+                <div class="card-body row g-2">
+                    <input type="hidden" name="id" value="@t.Id" />
+                    <div class="col-md-6"><label class="form-label small" for="tn">Ekip adı</label><input id="tn" name="name" value="@t.Name" class="form-control" required /></div>
+                    <div class="col-md-6"><label class="form-label small" for="tu">Birim</label>
+                        <select id="tu" name="unitId" class="form-select">
+                            @foreach (var o in lk.Units) { <option value="@o.Id" selected="@(t.OrganizationUnitId == o.Id)">@o.Name</option> }
+                            @if (!lk.Units.Any(o => o.Id == t.OrganizationUnitId)) { <option value="@t.OrganizationUnitId" selected>@t.OrganizationUnit.Name</option> }
+                        </select></div>
+                    <div class="col-md-6"><label class="form-label small" for="ts">Ekip şefi</label>
+                        <select id="ts" name="supervisorId" class="form-select"><option value="">— Yok —</option>
+                            @foreach (var o in all) { <option value="@o.Id" selected="@(t.SupervisorEmployeeId == o.Id)">@o.Name</option> }
+                        </select>
+                        <div class="form-text">Şef değişince şef ekibe alınır; eski şefe bağlı üyelerin bağlı şefi yeni şef olur.</div></div>
+                    <div class="col-md-6"><label class="form-label small" for="td">Açıklama</label><input id="td" name="description" value="@t.Description" class="form-control" maxlength="500" /></div>
+                    <div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="isActive" value="true" id="ta" checked="@t.IsActive" /><label class="form-check-label" for="ta">Aktif</label></div></div>
+                </div>
+                <div class="card-footer"><button class="btn btn-primary" type="submit">Kaydet</button></div>
+            </form>
+        }
+    </div>
+
+    <div class="col-lg-5">
+        @if (!canEdit)
+        {
+            <div class="alert alert-light border small">@Ui.Icon("lock") Ekip üyelerini ve şefini birim yöneticisi veya sistem yöneticisi değiştirir.</div>
+        }
+        else
+        {
+        <form method="post" action="/tanimlar/ekipler/@t.Id/uyeler" class="card">
+            <div class="card-header">Ekibe personel ekle</div>
+            <div class="card-body">
+                @if (Model.Candidates.Count == 0)
+                {
+                    <div class="small text-secondary">Eklenebilecek aktif personel yok. Önce <a href="/personel/yeni">personel ekleyin</a>.</div>
+                }
+                else
+                {
+                    <input type="search" class="form-control form-control-sm mb-2" placeholder="Ad, soyad, unvan ara…" aria-label="Personel ara" data-filter-list="#candidateList" />
+                    <div id="candidateList" class="candidate-list">
+                        @foreach (var c in Model.Candidates)
+                        {
+                            <label class="candidate" data-text="@($"{c.Name} {c.Title} {c.CurrentTeam} {c.Unit}".ToLower(TrTime.Culture))">
+                                <input class="form-check-input" type="checkbox" name="employeeIds" value="@c.Id" />
+                                <span>
+                                    <span class="fw-semibold">@c.Name</span>
+                                    <span class="small text-secondary d-block">@(c.Title ?? "Unvan yok") · @c.Unit@(c.CurrentTeam is null ? "" : $" · şu an: {c.CurrentTeam}")</span>
+                                </span>
+                            </label>
+                        }
+                    </div>
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" name="setSupervisor" value="true" id="setSup" checked="@(t.SupervisorEmployeeId is not null)" disabled="@(t.SupervisorEmployeeId is null)" />
+                        <label class="form-check-label small" for="setSup">Bağlı şefleri ekip şefi (@(t.SupervisorEmployee?.FullName ?? "şef seçilmedi")) olsun</label>
+                    </div>
+                    <div class="small text-secondary mt-1">Başka ekipteki personel işaretlenirse bu ekibe taşınır.</div>
+                }
+            </div>
+            @if (Model.Candidates.Count > 0)
+            {
+                <div class="card-footer d-flex justify-content-between align-items-center">
+                    <span class="small text-secondary" data-count-for="#candidateList">0 seçili</span>
+                    <button class="btn btn-primary" type="submit">@Ui.Icon("plus") Seçilenleri ekibe ekle</button>
+                </div>
+            }
+        </form>
+        }
+    </div>
+</div>

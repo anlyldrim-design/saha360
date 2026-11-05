@@ -1,0 +1,19 @@
+@model (int Page, int TotalPages, int Total)
+@if (Model.TotalPages > 1)
+{
+    <nav class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2" aria-label="Sayfalar">
+        <span class="small text-secondary">Toplam @Model.Total kayıt · Sayfa @Model.Page / @Model.TotalPages</span>
+        <ul class="pagination pagination-sm mb-0">
+            <li class="page-item @(Model.Page <= 1 ? "disabled" : "")"><a class="page-link" href="@Ui.WithPage(Context.Request, Model.Page - 1)">‹ Önceki</a></li>
+            @for (var p = Math.Max(1, Model.Page - 2); p <= Math.Min(Model.TotalPages, Model.Page + 2); p++)
+            {
+                <li class="page-item @(p == Model.Page ? "active" : "")"><a class="page-link" href="@Ui.WithPage(Context.Request, p)">@p</a></li>
+            }
+            <li class="page-item @(Model.Page >= Model.TotalPages ? "disabled" : "")"><a class="page-link" href="@Ui.WithPage(Context.Request, Model.Page + 1)">Sonraki ›</a></li>
+        </ul>
+    </nav>
+}
+else if (Model.Total > 0)
+{
+    <div class="small text-secondary mt-2">Toplam @Model.Total kayıt</div>
+}

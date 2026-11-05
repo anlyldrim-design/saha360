@@ -1,0 +1,73 @@
+@model Dictionary<string, HashSet<string>>
+@{
+    ViewData["Title"] = "Yetkiler";
+    var roles = Saha360.Infrastructure.Services.PermissionService.EditableRoles;
+}
+<div class="page-head">
+    <div>
+        <h1 class="page-title">Yetkiler</h1>
+        <p class="text-secondary mb-0">Hangi sistem rolünün neyi yapabileceğini buradan ayarlayın. Kişiye rol, <a href="/kullanicilar">Kullanıcılar</a> ekranından verilir.</p>
+    </div>
+    <form method="post" action="/yetkiler/varsayilan" data-confirm="Tüm yetkiler ilk kurulumdaki önerilen değerlere döndürülsün mü?">
+        <button class="btn btn-outline-secondary" type="submit">@Ui.Icon("undo") Varsayılana dön</button>
+    </form>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-4"><div class="help-box">
+        <div class="fw-semibold">1. İzin: ne yapabilir?</div>
+        <div class="small">Aşağıdaki tablo. Bir kişinin birden fazla rolü varsa izinleri birleşir.</div>
+    </div></div>
+    <div class="col-md-4"><div class="help-box">
+        <div class="fw-semibold">2. Birim kapsamı: hangi veriyi?</div>
+        <div class="small">İzinler yalnız kişinin <b>kendi biriminde</b> geçerlidir. Birim; kullanıcı hesabındaki "Birim kapsamı"ndan, boşsa bağlı personel kaydından gelir.
+            "Tüm birimlerin verisini görme" izni ya da kullanıcıya özel "tüm birimler" ayarı bu sınırı kaldırır.</div>
+    </div></div>
+    <div class="col-md-4"><div class="help-box">
+        <div class="fw-semibold">3. Kişisel ilişki: her zaman</div>
+        <div class="small">İzni olmasa da herkes kendisine atanan işleri görür ve çalışır; işin <b>sorumlu şefi</b> o işi onaylar/iade eder.
+            Sistem yöneticisi her zaman tüm yetkilere sahiptir.</div>
+    </div></div>
+</div>
+
+<form method="post" action="/yetkiler" class="card">
+    <div class="table-responsive">
+        <table class="table align-middle mb-0 perm-table">
+            <thead>
+                <tr>
+                    <th style="min-width:280px">İzin</th>
+                    <th class="text-center" title="Değiştirilemez">Sistem yöneticisi 🔒</th>
+                    @foreach (var r in roles) { <th class="text-center">@SystemRoles.DisplayName(r)</th> }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var group in Permissions.All.GroupBy(p => p.Group))
+                {
+                    <tr class="table-light"><th colspan="@(roles.Length + 2)">@group.Key</th></tr>
+                    @foreach (var p in group)
+                    {
+                        <tr>
+                            <td>
+                                <div class="fw-semibold">@p.Label</div>
+                                @if (p.Description.Length > 0) { <div class="small text-secondary">@p.Description</div> }
+                            </td>
+                            <td class="text-center"><input class="form-check-input" type="checkbox" checked disabled aria-label="Sistem yöneticisi: @p.Label" /></td>
+                            @foreach (var r in roles)
+                            {
+                                var on = Model.TryGetValue(r, out var set) && set.Contains(p.Key);
+                                <td class="text-center">
+                                    <input class="form-check-input" type="checkbox" name="granted" value="@(r)|@(p.Key)" checked="@on"
+                                           aria-label="@SystemRoles.DisplayName(r): @p.Label" />
+                                </td>
+                            }
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="card-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span class="small text-secondary">Kullanıcı hesabı yönetimi verilen kişi bile "Sistem yöneticisi" rolünü veremez; Yetkiler ekranını yalnız sistem yöneticisi açar.</span>
+        <button class="btn btn-primary" type="submit">@Ui.Icon("check") Kaydet</button>
+    </div>
+</form>

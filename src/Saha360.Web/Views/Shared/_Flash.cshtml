@@ -1,0 +1,20 @@
+@{
+    var ok = TempData["Ok"] as string;
+    var info = TempData["Info"] as string;
+    var err = TempData["Error"] as string;
+}
+@if (ok is not null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="status">@Ui.Icon("check") @ok
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Kapat"></button></div>
+}
+@if (info is not null)
+{
+    <div class="alert alert-info alert-dismissible fade show" role="status">@Ui.Icon("info") @info
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Kapat"></button></div>
+}
+@if (err is not null)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">@Ui.Icon("x") @err
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Kapat"></button></div>
+}

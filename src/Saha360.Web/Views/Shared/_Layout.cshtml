@@ -1,0 +1,186 @@
+@using Microsoft.AspNetCore.Antiforgery
+@inject IAntiforgery Antiforgery
+@inject CurrentUser Current
+@inject NotificationService Notifications
+@{
+    var authenticated = User.Identity?.IsAuthenticated == true;
+    UserContext? me = null;
+    if (authenticated) { try { me = await Current.GetAsync(); } catch (Saha360.Domain.Exceptions.ForbiddenException) { } }
+    var unread = me is null ? 0 : await Notifications.UnreadCountAsync(me.UserId);
+    var latest = me is null ? [] : await Notifications.LatestAsync(me.UserId, 6);
+    var title = ViewData["Title"] as string;
+    var path = Context.Request.Path.Value ?? "/";
+    string Active(string prefix, bool exact = false) => (exact ? path == prefix : path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) ? "active" : "";
+    var view = Context.Request.Query["view"].ToString();
+}
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="csrf" content="@Antiforgery.GetAndStoreTokens(Context).RequestToken" />
+    <title>@(string.IsNullOrEmpty(title) ? "Saha360" : $"{title} · Saha360")</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23185a9d'/%3E%3Cpath d='M10 22v-6m6 6V10m6 12v-9' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    @await RenderSectionAsync("Head", required: false)
+</head>
+<body class="@(me is null ? "anon" : "app")">
+    <partial name="_Icons" />
+    <a class="visually-hidden-focusable skip-link" href="#icerik">İçeriğe atla</a>
+
+    @if (me is not null)
+    {
+        <aside class="sidebar offcanvas-lg offcanvas-start" tabindex="-1" id="sidebar" aria-label="Ana menü">
+            <div class="sidebar-head">
+                <a class="brand" href="/">@Ui.Icon("logo", "logo") <span>Saha<b>360</b></span></a>
+                <button type="button" class="btn-close btn-close-white d-lg-none" data-bs-dismiss="offcanvas" data-bs-target="#sidebar" aria-label="Menüyü kapat"></button>
+            </div>
+            <nav class="sidebar-nav">
+                @{
+                    // Menü yalnız arayüz kolaylığıdır: her sayfa ve işlem sunucuda izin + birim kapsamıyla ayrıca denetlenir.
+                    var fieldOnly = me.Perms.Count == 0 && !me.IsSupervisor;
+                    var canImport = me.CanManageDefinitions || me.CanManagePersonnel || me.CanManageTeams || me.CanManageMaterials || me.CanManageUsers;
+                    var canMaterials = me.CanManageMaterials || me.CanCreateWork || me.Has(Permissions.WorksEdit) || me.CanAssign || me.CanViewReports;
+                    var canDefinitions = me.CanManageDefinitions || me.CanCreateWork || me.Has(Permissions.WorksEdit) || me.CanViewPersonnel || me.CanManagePersonnel;
+                    var canApprove = me.IsSupervisor || me.Has(Permissions.WorksApproveAny);
+                }
+                @if (!fieldOnly)
+                {
+                    <a class="nav-item @Active("/", true)" href="/">@Ui.Icon("home") Gösterge Paneli</a>
+                }
+                @if (me.EmployeeId is not null)
+                {
+                    <a class="nav-item @Active("/islerim")" href="/islerim">@Ui.Icon("briefcase") İşlerim</a>
+                }
+                @if (me.CanAssign)
+                {
+                    <a class="nav-item @(path.StartsWith("/havuz") && !Context.Request.Query.ContainsKey("durum") ? "active" : "")" href="/havuz">@Ui.Icon("calendar") İş Programı / Havuz</a>
+                }
+                <div class="nav-group">İşler</div>
+                <a class="nav-item @(path == "/isler" && view == "" ? "active" : "")" href="/isler">@Ui.Icon("list") @(me.CanViewAllWorks ? "Tüm İşler" : "İşler")</a>
+                @if (me.CanCreateWork)
+                {
+                    <a class="nav-item @Active("/isler/yeni")" href="/isler/yeni">@Ui.Icon("plus") Yeni İş Oluştur</a>
+                }
+                @if (canApprove)
+                {
+                    <a class="nav-item @Active("/onay")" href="/onay">@Ui.Icon("checklist") Onay Bekleyen İşler</a>
+                }
+                else if (!fieldOnly)
+                {
+                    <a class="nav-item @(view == "onay" ? "active" : "")" href="/isler?view=onay">@Ui.Icon("checklist") Onay Bekleyen İşler</a>
+                }
+                <a class="nav-item @(view == "iade" ? "active" : "")" href="/isler?view=iade">@Ui.Icon("undo") Reddedilen / İade</a>
+                <a class="nav-item @(view == "tamamlanan" ? "active" : "")" href="/isler?view=tamamlanan">@Ui.Icon("check") Tamamlanan İşler</a>
+
+                @if (me.CanSeeOrganization)
+                {
+                    <div class="nav-group">Personel ve Organizasyon</div>
+                    <a class="nav-item @Active("/organizasyon")" href="/organizasyon">@Ui.Icon("grid") Organizasyon Şeması</a>
+                    <a class="nav-item @(path.StartsWith("/personel") && !path.StartsWith("/personel/izinler") ? "active" : "")" href="/personel">@Ui.Icon("users") Personel Listesi</a>
+                    <a class="nav-item @(path.StartsWith("/havuz") && Context.Request.Query.ContainsKey("durum") ? "active" : "")" href="/havuz?durum=Available">@Ui.Icon("calendar") Personel Havuzu</a>
+                    <a class="nav-item @Active("/tanimlar/ekipler")" href="/tanimlar/ekipler">@Ui.Icon("flag") Ekipler ve Şefler</a>
+                    <a class="nav-item @Active("/personel/izinler")" href="/personel/izinler">@Ui.Icon("clock") Müsaitlik / İzinler</a>
+                }
+                @if (canMaterials)
+                {
+                    <div class="nav-group">Malzeme</div>
+                    <a class="nav-item @(path == "/malzemeler" ? "active" : "")" href="/malzemeler">@Ui.Icon("box") Malzeme Kataloğu</a>
+                    <a class="nav-item @Active("/malzemeler/kullanim")" href="/malzemeler/kullanim">@Ui.Icon("tag") İş Bazlı Kullanım</a>
+                }
+
+                <div class="nav-group">Genel</div>
+                @if (me.CanViewReports)
+                {
+                    <a class="nav-item @Active("/raporlar")" href="/raporlar">@Ui.Icon("chart") Raporlar</a>
+                }
+                <a class="nav-item @Active("/bildirimler")" href="/bildirimler">@Ui.Icon("bell") Bildirimler @if (unread > 0) { <span class="badge rounded-pill text-bg-danger ms-auto">@unread</span> }</a>
+                @if (canDefinitions)
+                {
+                    <a class="nav-item @(path == "/tanimlar" ? "active" : "")" href="/tanimlar">@Ui.Icon("settings") Tanımlar</a>
+                }
+                @if (canImport)
+                {
+                    <a class="nav-item @Active("/toplu-yukleme")" href="/toplu-yukleme">@Ui.Icon("download") Toplu Yükleme (Excel)</a>
+                }
+                @if (me.CanManageUsers)
+                {
+                    <a class="nav-item @Active("/kullanicilar")" href="/kullanicilar">@Ui.Icon("shield") Kullanıcılar</a>
+                }
+                @if (me.IsAdmin)
+                {
+                    <a class="nav-item @Active("/yetkiler")" href="/yetkiler">@Ui.Icon("lock") Yetkiler</a>
+                }
+                @if (me.Has(Permissions.AuditView))
+                {
+                    <a class="nav-item @Active("/sistem")" href="/sistem">@Ui.Icon("activity") Sistem ve Denetim</a>
+                }
+            </nav>
+        </aside>
+
+        <div class="main">
+            <header class="topbar">
+                <button class="btn btn-icon d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebar" aria-controls="sidebar" aria-label="Menüyü aç">@Ui.Icon("menu")</button>
+                <form class="topbar-search" action="/isler" method="get" role="search">
+                    @Ui.Icon("search")
+                    <input type="search" name="q" class="form-control" placeholder="İş no, başlık veya adres ara…" aria-label="Hızlı arama" value="@(path == "/isler" ? Context.Request.Query["q"].ToString() : "")" />
+                </form>
+                <div class="topbar-right">
+                    <div class="dropdown">
+                        <button class="btn btn-icon position-relative" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Bildirimler (@unread okunmamış)">
+                            @Ui.Icon("bell")
+                            @if (unread > 0) { <span class="dot-badge">@(unread > 99 ? "99+" : unread)</span> }
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-end notif-menu p-0">
+                            <div class="d-flex justify-content-between align-items-center px-3 py-2 border-bottom">
+                                <strong>Bildirimler</strong>
+                                <a href="/bildirimler" class="small">Tümü</a>
+                            </div>
+                            @if (latest.Count == 0)
+                            {
+                                <div class="p-3 text-secondary small">Henüz bildirim yok.</div>
+                            }
+                            @foreach (var n in latest)
+                            {
+                                <form method="post" action="/bildirimler/@n.Id/ac">
+                                    <button type="submit" class="notif-item @(n.IsRead ? "" : "unread")">
+                                        <span class="t">@n.Title</span>
+                                        <span class="m">@n.Message</span>
+                                        <span class="d">@TrTime.Format(n.CreatedAtUtc)</span>
+                                    </button>
+                                </form>
+                            }
+                        </div>
+                    </div>
+                    <div class="dropdown">
+                        <button class="btn user-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <span class="avatar">@(me.FullName.Length > 0 ? me.FullName[..1] : "?")</span>
+                            <span class="d-none d-sm-inline">@me.FullName</span>
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-end">
+                            <div class="px-3 py-2 small text-secondary">@string.Join(", ", me.Roles.Select(SystemRoles.DisplayName))</div>
+                            <a class="dropdown-item" href="/parola">@Ui.Icon("lock") Parola değiştir</a>
+                            <div class="dropdown-divider"></div>
+                            <form method="post" action="/cikis"><button class="dropdown-item" type="submit">@Ui.Icon("logout") Güvenli çıkış</button></form>
+                        </div>
+                    </div>
+                </div>
+            </header>
+            <main id="icerik" class="content">
+                <partial name="_Flash" />
+                @RenderBody()
+            </main>
+        </div>
+    }
+    else
+    {
+        <main id="icerik">@RenderBody()</main>
+    }
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

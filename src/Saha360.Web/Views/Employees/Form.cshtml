@@ -1,0 +1,126 @@
+@model EmployeeFormViewModel
+@{
+    var isNew = Model.Id is null;
+    var i = Model.Input;
+    ViewData["Title"] = isNew ? "Yeni personel" : $"{i.FirstName} {i.LastName}";
+}
+<nav class="small mb-1"><a href="/personel">Personel</a> › @(isNew ? "Yeni" : $"{i.FirstName} {i.LastName}")</nav>
+<h1 class="page-title">@(isNew ? "Yeni personel" : $"{i.FirstName} {i.LastName}")</h1>
+@if (!Model.CanEdit)
+{
+    <div class="alert alert-light border small">@Ui.Icon("lock") Salt okunur. Personel kaydını birim yöneticisi veya sistem yöneticisi değiştirir.</div>
+}
+<div class="row g-3">
+    <div class="col-lg-7">
+        <form method="post" action="@(isNew ? "/personel/yeni" : $"/personel/{Model.Id}")" class="card">
+            <fieldset class="card-body row g-3 m-0" disabled="@(!Model.CanEdit)">
+                <div asp-validation-summary="All" class="col-12 text-danger small"></div>
+                <div class="col-md-6"><label class="form-label" for="FirstName">Ad *</label><input id="FirstName" name="FirstName" value="@i.FirstName" class="form-control" required maxlength="80" /></div>
+                <div class="col-md-6"><label class="form-label" for="LastName">Soyad *</label><input id="LastName" name="LastName" value="@i.LastName" class="form-control" required maxlength="80" /></div>
+                <div class="col-md-6"><label class="form-label" for="EmployeeNumber">Sicil numarası</label><input id="EmployeeNumber" name="EmployeeNumber" value="@i.EmployeeNumber" class="form-control" maxlength="30" /><div class="form-text">Hassas bilgi; yalnız yetkili kişiler görür.</div></div>
+                <div class="col-md-6"><label class="form-label" for="Phone">Telefon</label><input id="Phone" name="Phone" value="@i.Phone" class="form-control" maxlength="30" inputmode="tel" /><div class="form-text">Gerekliyse girin (kişisel veri).</div></div>
+                <div class="col-md-6"><label class="form-label" for="OrganizationUnitId">Birim *</label><select id="OrganizationUnitId" name="OrganizationUnitId" class="form-select" required><option value="">Seçin</option>
+                    @foreach (var o in Model.Lookups.Units) { <option value="@o.Id" selected="@(i.OrganizationUnitId == o.Id)">@o.Name</option> }</select></div>
+                <div class="col-md-6"><label class="form-label" for="TeamId">Ekip</label><select id="TeamId" name="TeamId" class="form-select"><option value="">—</option>
+                    @foreach (var o in Model.Lookups.Teams) { <option value="@o.Id" selected="@(i.TeamId == o.Id)">@o.Name</option> }</select></div>
+                <div class="col-md-6"><label class="form-label" for="JobRoleId">Görev / unvan</label><select id="JobRoleId" name="JobRoleId" class="form-select"><option value="">—</option>
+                    @foreach (var o in Model.Lookups.JobRoles) { <option value="@o.Id" selected="@(i.JobRoleId == o.Id)">@o.Name</option> }</select></div>
+                <div class="col-md-6"><label class="form-label" for="SupervisorEmployeeId">Bağlı şef</label><select id="SupervisorEmployeeId" name="SupervisorEmployeeId" class="form-select"><option value="">—</option>
+                    @foreach (var o in Model.Supervisors) { <option value="@o.Id" selected="@(i.SupervisorEmployeeId == o.Id)">@o.Name</option> }</select></div>
+                <div class="col-12">
+                    @* Sıra önemli: işaret kutusu gizli "false" alanından ÖNCE gelmeli; sunucu ilk değeri okur. *@
+                    <div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" id="IsActive" name="IsActive" value="true" checked="@i.IsActive" /><label class="form-check-label" for="IsActive">Aktif (pasif personel işe atanamaz; geçmiş kayıtları korunur)</label></div>
+                    <input type="hidden" name="IsActive" value="false" />
+                </div>
+
+                <div class="col-12"><hr class="my-1" /></div>
+                <div class="col-12">
+                    <div class="fw-semibold mb-1">Uygulama hesabı</div>
+                    @if (Model.AccountUserName is not null)
+                    {
+                        <div class="small">
+                            Bağlı hesap: <b>@Model.AccountUserName</b>
+                            @if (Model.AccountIsActive) { <span class="badge text-bg-success">Aktif</span> } else { <span class="badge text-bg-secondary">Pasif — giriş yapamaz</span> }
+                            @if (Model.CanManageAccounts) { <a class="ms-2" href="/kullanicilar/@Model.AccountUserId">Hesabı düzenle ›</a> }
+                        </div>
+                    }
+                    else if (Model.CanManageAccounts)
+                    {
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="CreateAccount" name="CreateAccount" value="true" checked="@Model.Account.Create" data-toggle-target="#accountFields" />
+                            <label class="form-check-label" for="CreateAccount">Bu personel için uygulama hesabı da oluştur (giriş yapıp "İşlerim"i kullanabilsin)</label>
+                        </div>
+                        <div id="accountFields" class="row g-2" hidden="@(!Model.Account.Create)">
+                            <div class="col-md-4"><label class="form-label small" for="AccountUserName">Kullanıcı adı</label>
+                                <input id="AccountUserName" name="AccountUserName" value="@Model.Account.UserName" class="form-control" autocomplete="off" placeholder="ör. anil.yildirim" /></div>
+                            <div class="col-md-4"><label class="form-label small" for="AccountPassword">İlk parola</label>
+                                <input id="AccountPassword" name="AccountPassword" type="password" class="form-control" autocomplete="new-password" minlength="8" placeholder="en az 8 karakter, 1 rakam" /></div>
+                            <div class="col-md-4"><label class="form-label small" for="AccountRole">Sistem rolü</label>
+                                <select id="AccountRole" name="AccountRole" class="form-select">
+                                    @foreach (var r in new[] { SystemRoles.Personnel, SystemRoles.Supervisor, SystemRoles.Planner, SystemRoles.UnitManager, SystemRoles.ReportViewer, SystemRoles.SystemAdmin })
+                                    {
+                                        if (r == SystemRoles.SystemAdmin && !User.IsInRole(SystemRoles.SystemAdmin)) { continue; }
+                                        <option value="@r" selected="@(Model.Account.Role == r)">@SystemRoles.DisplayName(r)</option>
+                                    }
+                                </select></div>
+                            <div class="col-12 form-text">Başka roller ve parola sıfırlama sonradan Kullanıcılar ekranından yapılır.</div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="small text-secondary">Yok. Hesabı olmayan personel de işe atanabilir; hesabı kullanıcı yönetimi yetkisi olan kişi açar.</div>
+                    }
+                </div>
+            </fieldset>
+            <div class="card-footer d-flex gap-2">
+                @if (Model.CanEdit) { <button class="btn btn-primary" type="submit">Kaydet</button><a href="/personel" class="btn btn-outline-secondary">Vazgeç</a> }
+                else { <a href="/personel" class="btn btn-outline-secondary">Listeye dön</a> }
+            </div>
+        </form>
+    </div>
+    @if (!isNew)
+    {
+        <div class="col-lg-5">
+            <section class="card mb-3" id="izinler">
+                <div class="card-header">İzin / müsaitlik</div>
+                <div class="card-body">
+                    @if (Model.CanManageLeave)
+                    {
+                    <form method="post" action="/personel/@Model.Id/izin" class="row g-2 align-items-end">
+                        <div class="col-12"><select name="type" class="form-select form-select-sm" aria-label="Tür">
+                            @foreach (var t in Enum.GetValues<AvailabilityType>()) { <option value="@t">@TrNames.Of(t)</option> }</select></div>
+                        <div class="col-6"><label class="form-label small mb-0" for="ls">Başlangıç</label><input id="ls" type="datetime-local" name="start" class="form-control form-control-sm" required value="@TrTime.TodayLocal.ToString("yyyy-MM-ddT08:00")" /></div>
+                        <div class="col-6"><label class="form-label small mb-0" for="le">Bitiş</label><input id="le" type="datetime-local" name="end" class="form-control form-control-sm" required value="@TrTime.TodayLocal.ToString("yyyy-MM-ddT17:00")" /></div>
+                        <div class="col-8"><input name="note" class="form-control form-control-sm" placeholder="Not (isteğe bağlı)" maxlength="500" aria-label="Not" /></div>
+                        <div class="col-4"><button class="btn btn-sm btn-primary w-100" type="submit">Ekle</button></div>
+                    </form>
+                    }
+                    else
+                    {
+                        <div class="small text-secondary">İzin ve müsaitlik kaydını birim yöneticisi veya sistem yöneticisi girer.</div>
+                    }
+                    <ul class="list-group list-group-flush mt-2">
+                        @foreach (var a in Model.Availabilities)
+                        {
+                            <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                <span><span class="badge text-bg-warning">@TrNames.Of(a.Type)</span> @TrTime.Range(a.StartAtUtc, a.EndAtUtc) <span class="small text-secondary">@a.Note</span></span>
+                                @if (Model.CanManageLeave) { <form method="post" action="/personel/@Model.Id/izin/@a.Id/sil" data-confirm="İzin kaydı kaldırılsın mı?"><button class="btn btn-sm btn-outline-danger" type="submit" aria-label="Kaldır">@Ui.Icon("trash")</button></form> }
+                            </li>
+                        }
+                        @if (Model.Availabilities.Count == 0) { <li class="list-group-item px-0 small text-secondary">Kayıtlı izin yok.</li> }
+                    </ul>
+                </div>
+            </section>
+            <section class="card">
+                <div class="card-header">Son işleri</div>
+                <ul class="list-group list-group-flush">
+                    @foreach (var w in Model.RecentWorks)
+                    {
+                        <li class="list-group-item"><a href="/isler/@w.Id">@w.WorkNumber</a> @w.Title <div class="small">@TrTime.Range(w.PlannedStartAtUtc, w.PlannedEndAtUtc) @Ui.Status(w.Status)</div></li>
+                    }
+                    @if (Model.RecentWorks.Count == 0) { <li class="list-group-item small text-secondary">Henüz iş yok.</li> }
+                </ul>
+            </section>
+        </div>
+    }
+</div>

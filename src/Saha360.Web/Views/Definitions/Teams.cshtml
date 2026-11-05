@@ -1,0 +1,56 @@
+@model List<Team>
+@{
+    ViewData["Title"] = "Ekipler ve Şefler";
+    var canEdit = ViewData["CanEdit"] as bool? ?? false;
+    var lk = (Lookups)ViewData["Lookups"]!;
+    var members = (Dictionary<int, int>)ViewData["Members"]!;
+    var all = (List<Option>)ViewData["AllEmployees"]!;
+}
+<div class="page-head">
+    <div>
+        <h1 class="page-title">Ekipler ve Şefler</h1>
+        <p class="text-secondary mb-0">Bir ekibe tıklayın: şefini seçin, üyelerini listeden işaretleyip toplu ekleyin veya çıkarın.</p>
+    </div>
+    @if (canEdit)
+    {
+        <a href="/toplu-yukleme/ekipler" class="btn btn-outline-primary">@Ui.Icon("download") Toplu ekip ekle (Excel)</a>
+    }
+</div>
+
+@if (Model.Count == 0)
+{
+    <div class="empty card card-body">@Ui.Icon("users", "big") <div>Henüz ekip yok. Aşağıdan ilk ekibi ekleyin.</div></div>
+}
+else
+{
+    <div class="team-grid">
+        @foreach (var t in Model)
+        {
+            <a class="card team-tile @(t.IsActive ? "" : "inactive")" href="/tanimlar/ekipler/@t.Id">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start gap-2">
+                        <div class="fw-semibold">@t.Name</div>
+                        @if (!t.IsActive) { <span class="badge text-bg-secondary">Pasif</span> }
+                    </div>
+                    <div class="small text-secondary">@t.OrganizationUnit.Name</div>
+                    <div class="small mt-2">@Ui.Icon("flag") Şef: <b>@(t.SupervisorEmployee?.FullName ?? "seçilmedi")</b></div>
+                    <div class="small">@Ui.Icon("users") @members.GetValueOrDefault(t.Id) üye</div>
+                    <div class="small text-primary mt-2">Üyeler ve ayarlar ›</div>
+                </div>
+            </a>
+        }
+    </div>
+}
+
+@if (canEdit)
+{
+    <form method="post" action="/tanimlar/ekipler" class="card mt-3"><div class="card-body row g-2 align-items-end">
+        <div class="col-12 fw-semibold">Yeni ekip</div>
+        <div class="col-md-4"><label class="form-label small" for="tn">Ekip adı</label><input id="tn" name="name" class="form-control" required placeholder="ör. Saha Ekibi 1" /></div>
+        <div class="col-md-3"><label class="form-label small" for="tu">Birim</label><select id="tu" name="unitId" class="form-select" required>@foreach (var o in lk.Units) { <option value="@o.Id">@o.Name</option> }</select></div>
+        <div class="col-md-3"><label class="form-label small" for="ts">Şef</label><select id="ts" name="supervisorId" class="form-select"><option value="">— Sonra seçilecek —</option>@foreach (var o in all) { <option value="@o.Id">@o.Name</option> }</select></div>
+        <input type="hidden" name="isActive" value="true" />
+        <div class="col-md-2"><button class="btn btn-primary w-100" type="submit">Ekle</button></div>
+        <div class="col-12 form-text">Ekleyince ekibin sayfası açılır; üyeleri oradan toplu ekleyebilirsiniz.</div>
+    </div></form>
+}

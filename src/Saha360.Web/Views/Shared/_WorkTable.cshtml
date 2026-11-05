@@ -1,0 +1,37 @@
+@model List<WorkListItem>
+@if (Model.Count == 0)
+{
+    <div class="empty">@Ui.Icon("list", "big") <div>Bu ölçütlere uyan iş yok.</div></div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-hover align-middle work-table">
+            <thead>
+                <tr>
+                    <th>İş no</th><th>Başlık</th><th class="d-none d-xl-table-cell">Kategori</th><th class="d-none d-md-table-cell">Konum</th>
+                    <th>Planlanan</th><th class="text-center" title="Atanan personel">Ekip</th><th class="d-none d-lg-table-cell">Sorumlu şef</th>
+                    <th>Öncelik</th><th>Durum</th><th class="d-none d-xl-table-cell">Son güncelleme</th><th><span class="visually-hidden">Eylemler</span></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var w in Model)
+                {
+                    <tr>
+                        <td class="text-nowrap"><a href="/isler/@w.Id" class="fw-semibold">@w.WorkNumber</a></td>
+                        <td><a href="/isler/@w.Id" class="text-body">@w.Title</a></td>
+                        <td class="d-none d-xl-table-cell small">@(w.Category ?? "—")</td>
+                        <td class="d-none d-md-table-cell small">@(w.Location ?? "—")</td>
+                        <td class="small text-nowrap">@TrTime.Range(w.PlannedStartAtUtc, w.PlannedEndAtUtc) @Ui.Overdue(w.IsOverdue)</td>
+                        <td class="text-center">@w.AssignedCount</td>
+                        <td class="d-none d-lg-table-cell small">@(w.SupervisorName ?? "—")</td>
+                        <td>@Ui.Priority(w.Priority)</td>
+                        <td>@Ui.Status(w.Status)</td>
+                        <td class="d-none d-xl-table-cell small text-secondary text-nowrap">@TrTime.Format(w.UpdatedAtUtc)</td>
+                        <td class="text-end"><a href="/isler/@w.Id" class="btn btn-sm btn-outline-secondary">Aç</a></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

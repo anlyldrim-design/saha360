@@ -1,0 +1,64 @@
+@model List<MaterialCatalog>
+@{
+    ViewData["Title"] = "Malzeme Kataloğu";
+    var q = ViewData["Q"] as string;
+    var canEdit = ViewData["CanEdit"] as bool? ?? false;
+}
+<div class="page-head">
+    <div>
+        <h1 class="page-title">Malzeme Kataloğu</h1>
+        <p class="text-secondary mb-0">Stok tutulmaz; işlerde yalnız kullanılan miktar kaydedilir. Malzeme silinmez, pasife alınır.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        @if (canEdit) { <a href="/toplu-yukleme/malzemeler" class="btn btn-outline-primary">@Ui.Icon("download") Toplu malzeme ekle (Excel)</a> }
+        <a href="/malzemeler/kullanim" class="btn btn-outline-secondary">İş bazlı kullanım ›</a>
+    </div>
+</div>
+
+@if (canEdit)
+{
+<details class="card mb-3 material-panel">
+    <summary class="card-header">@Ui.Icon("plus") Yeni malzeme ekle</summary>
+    <form method="post" action="/malzemeler" class="card-body row g-2 align-items-end">
+        <div class="col-6 col-md-2"><label class="form-label small" for="mc">Kod *</label><input id="mc" name="code" class="form-control" required maxlength="40" /></div>
+        <div class="col-6 col-md-4"><label class="form-label small" for="mn">Ad *</label><input id="mn" name="name" class="form-control" required maxlength="200" /></div>
+        <div class="col-6 col-md-2"><label class="form-label small" for="mk">Kategori</label><input id="mk" name="category" class="form-control" maxlength="100" /></div>
+        <div class="col-6 col-md-2"><label class="form-label small" for="mu">Birim *</label><input id="mu" name="unit" class="form-control" required maxlength="30" list="units" placeholder="adet" /></div>
+        <datalist id="units"><option value="adet"></option><option value="metre"></option><option value="kilogram"></option><option value="litre"></option><option value="m³"></option><option value="torba"></option></datalist>
+        <input type="hidden" name="isActive" value="true" />
+        <div class="col-md-2"><button class="btn btn-primary w-100" type="submit">Ekle</button></div>
+    </form>
+</details>
+}
+
+<form method="get" class="d-flex gap-2 mb-2" role="search">
+    <input name="q" value="@q" class="form-control" placeholder="Ad, kod veya kategori ara" aria-label="Malzeme ara" />
+    <button class="btn btn-outline-primary" type="submit">Ara</button>
+    <a class="btn btn-outline-secondary text-nowrap" href="/malzemeler?pasif=true">Pasifleri de göster</a>
+</form>
+<div class="card"><div class="card-body p-0"><div class="table-responsive">
+    <table class="table align-middle mb-0">
+        <thead><tr><th>Kod</th><th>Ad</th><th>Kategori</th><th>Birim</th><th>Aktif</th>@if (canEdit) { <th></th> }</tr></thead>
+        <tbody>
+            @foreach (var m in Model.Where(_ => !canEdit))
+            {
+                <tr class="@(m.IsActive ? "" : "text-secondary")"><td>@m.Code</td><td>@m.Name</td><td>@(m.Category ?? "—")</td><td>@m.Unit</td>
+                    <td>@(m.IsActive ? "Evet" : "Hayır")</td></tr>
+            }
+            @foreach (var m in Model.Where(_ => canEdit))
+            {
+                var fid = $"m{m.Id}";
+                <tr>
+                    <td style="width:130px"><input form="@fid" name="code" value="@m.Code" class="form-control form-control-sm" aria-label="Kod" /></td>
+                    <td><input form="@fid" name="name" value="@m.Name" class="form-control form-control-sm" aria-label="Ad" /></td>
+                    <td style="width:160px"><input form="@fid" name="category" value="@m.Category" class="form-control form-control-sm" aria-label="Kategori" /></td>
+                    <td style="width:110px"><input form="@fid" name="unit" value="@m.Unit" class="form-control form-control-sm" list="units" aria-label="Birim" /></td>
+                    <td><input form="@fid" type="checkbox" name="isActive" value="true" class="form-check-input" checked="@m.IsActive" aria-label="Aktif" /></td>
+                    <td><form id="@fid" method="post" action="/malzemeler"><input type="hidden" name="id" value="@m.Id" /><input type="hidden" name="description" value="@m.Description" /><button class="btn btn-sm btn-outline-primary" type="submit">Kaydet</button></form></td>
+                </tr>
+            }
+            @if (Model.Count == 0) { <tr><td colspan="6" class="text-secondary p-3">Malzeme bulunamadı.</td></tr> }
+        </tbody>
+    </table>
+</div></div></div>
+<p class="small text-secondary mt-2">Katalogda yapılan ad/birim değişikliği geçmiş iş kayıtlarını değiştirmez (iş satırında anlık görüntü saklanır).</p>

@@ -1,0 +1,42 @@
+@model List<ApprovalCard>
+@{
+    ViewData["Title"] = "Onay Bekleyen İşler";
+}
+<div class="page-head">
+    <div>
+        <h1 class="page-title">Onay Bekleyen İşler</h1>
+        <p class="text-secondary mb-0">Yalnız onayınıza gelen işler. Ayrıntıları inceleyip onaylayın, iade edin veya ek bilgi isteyin.</p>
+    </div>
+</div>
+@if (Model.Count == 0)
+{
+    <div class="empty card card-body">@Ui.Icon("checklist", "big") <div>Onayınızı bekleyen iş yok.</div></div>
+}
+<div class="mywork-grid">
+    @foreach (var c in Model)
+    {
+        var w = c.Work;
+        <article class="card mywork">
+            <div class="card-body">
+                <div class="d-flex flex-wrap gap-1 align-items-center mb-1">
+                    <a href="/isler/@w.Id" class="work-no">@w.WorkNumber</a> @Ui.Priority(w.Priority) @Ui.Overdue(w.IsOverdue)
+                </div>
+                <h3 class="h6 mb-1"><a href="/isler/@w.Id" class="text-body">@w.Title</a></h3>
+                <div class="small">@Ui.Icon("pin") @(w.Location ?? "—")</div>
+                <div class="small">Planlanan: @TrTime.Range(w.PlannedStartAtUtc, w.PlannedEndAtUtc)</div>
+                <div class="small">Gerçekleşen: @TrTime.Format(c.ActualStartAtUtc) → @TrTime.Format(c.SubmittedAtUtc)
+                    @if (c.ActualStartAtUtc is DateTime s && c.SubmittedAtUtc is DateTime e) { <span class="text-secondary">(@TrTime.Duration(e - s))</span> }</div>
+                <div class="instruction small my-2"><b>Tamamlanma açıklaması:</b> @c.CompletionNote</div>
+                <div class="small text-secondary">Ekip: @string.Join(", ", c.Team)</div>
+                <div class="small mt-1">
+                    <span class="badge text-bg-light border">@Ui.Icon("camera") @c.PhotoCount dosya</span>
+                    <span class="badge text-bg-light border">@Ui.Icon("comment") @c.NoteCount not</span>
+                    <span class="badge text-bg-light border">@Ui.Icon("box") @c.MaterialCount malzeme</span>
+                </div>
+            </div>
+            <div class="mywork-actions">
+                <a href="/isler/@w.Id" class="btn btn-primary flex-fill">İncele ve karar ver ›</a>
+            </div>
+        </article>
+    }
+</div>

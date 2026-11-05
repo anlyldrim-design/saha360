@@ -1,0 +1,65 @@
+@model PagedResult<EmployeeRow>
+@{
+    ViewData["Title"] = "Personel Listesi";
+    var lk = (Lookups)ViewData["Lookups"]!;
+    var rq = Context.Request.Query;
+    var canManage = ViewData["CanManage"] as bool? ?? false;
+}
+<div class="page-head">
+    <h1 class="page-title">Personel Listesi</h1>
+    <div class="d-flex flex-wrap gap-2">
+        <a href="/organizasyon" class="btn btn-outline-secondary">@Ui.Icon("grid") Organizasyon şeması</a>
+        @if (canManage)
+        {
+            <a href="/toplu-yukleme/personel" class="btn btn-outline-primary">@Ui.Icon("download") Toplu personel ekle (Excel)</a>
+            <a href="/personel/yeni" class="btn btn-primary">@Ui.Icon("plus") Yeni personel</a>
+        }
+    </div>
+</div>
+@if (!canManage)
+{
+    <div class="alert alert-light border small">Personel eklemek ve düzenlemek birim yöneticisi ve sistem yöneticisinin yetkisindedir. Bu listeyi yalnız görüntüleyebilirsiniz.</div>
+}
+<form method="get" class="card filter-card mb-3"><div class="card-body row g-2 align-items-end">
+    <div class="col-md-3"><label class="form-label small" for="q">Ara</label><input id="q" name="q" value="@rq["q"]" class="form-control" placeholder="Ad, soyad veya sicil no" /></div>
+    @if (lk.Units.Count > 1)
+    {
+        <div class="col-6 col-md-2"><label class="form-label small" for="u">Birim</label><select id="u" name="unitId" class="form-select"><option value="">Tümü</option>
+            @foreach (var o in lk.Units) { <option value="@o.Id" selected="@(rq["unitId"] == o.Id.ToString())">@o.Name</option> }</select></div>
+    }
+    <div class="col-6 col-md-2"><label class="form-label small" for="t">Ekip</label><select id="t" name="teamId" class="form-select"><option value="">Tümü</option>
+        @foreach (var o in lk.Teams) { <option value="@o.Id" selected="@(rq["teamId"] == o.Id.ToString())">@o.Name</option> }</select></div>
+    <div class="col-6 col-md-2"><label class="form-label small" for="r">Unvan</label><select id="r" name="roleId" class="form-select"><option value="">Tümü</option>
+        @foreach (var o in lk.JobRoles) { <option value="@o.Id" selected="@(rq["roleId"] == o.Id.ToString())">@o.Name</option> }</select></div>
+    <div class="col-6 col-md-1"><label class="form-label small" for="d">Durum</label><select id="d" name="durum" class="form-select">
+        <option value="">Tümü</option><option value="aktif" selected="@(rq["durum"] == "aktif")">Aktif</option><option value="pasif" selected="@(rq["durum"] == "pasif")">Pasif</option></select></div>
+    <div class="col-6 col-md-2"><button class="btn btn-primary w-100" type="submit">@Ui.Icon("search") Ara</button></div>
+</div></form>
+<div class="card"><div class="card-body p-0">
+    @if (Model.Items.Count == 0)
+    {
+        <div class="empty">Kayıt bulunamadı.</div>
+    }
+    else
+    {
+        <div class="table-responsive"><table class="table table-hover align-middle mb-0">
+            <thead><tr><th>Ad soyad</th><th>Sicil no</th><th>Unvan</th><th class="d-none d-md-table-cell">Ekip</th><th class="d-none d-lg-table-cell">Bağlı şef</th><th class="d-none d-lg-table-cell">Birim</th><th>Hesap</th><th>Durum</th></tr></thead>
+            <tbody>
+                @foreach (var e in Model.Items)
+                {
+                    <tr class="@(e.IsActive ? "" : "text-secondary")">
+                        <td><a href="/personel/@e.Id" class="fw-semibold">@e.FullName</a></td>
+                        <td class="small">@(e.EmployeeNumber ?? "—")</td>
+                        <td>@(e.JobRole ?? "—")</td>
+                        <td class="d-none d-md-table-cell">@(e.Team ?? "—")</td>
+                        <td class="d-none d-lg-table-cell small">@(e.Supervisor ?? "—")</td>
+                        <td class="d-none d-lg-table-cell small">@e.Unit</td>
+                        <td>@(e.HasAccount ? "Var" : "Yok")</td>
+                        <td>@if (e.IsActive) { <span class="badge text-bg-success">Aktif</span> } else { <span class="badge text-bg-secondary">Pasif</span> }</td>
+                    </tr>
+                }
+            </tbody>
+        </table></div>
+    }
+</div></div>
+<partial name="_Pager" model="(Model.Page, Model.TotalPages, Model.Total)" />

@@ -1,0 +1,8 @@
+@model DefinitionService.OrgPerson
+<li class="@(Model.IsActive ? "" : "text-secondary")">
+    <a href="/personel/@Model.Id">@Model.Name</a>
+    <span class="small text-secondary">@(Model.Title ?? "unvan yok")</span>
+    @if (Model.OnLeaveNow) { <span class="badge text-bg-warning">İzinli</span> }
+    @if (!Model.IsActive) { <span class="badge text-bg-secondary">Pasif</span> }
+    @if (Model.HasAccount) { <span class="text-success small" title="Uygulama hesabı var">●</span> }
+</li>

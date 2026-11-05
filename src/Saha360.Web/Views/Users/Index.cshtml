@@ -1,0 +1,35 @@
+@model List<UserRow>
+@{
+    ViewData["Title"] = "Kullanıcılar ve Yetkiler";
+}
+<div class="page-head">
+    <div>
+        <h1 class="page-title">Kullanıcılar ve Yetkiler</h1>
+        <p class="text-secondary mb-0">Sistem rolü uygulama yetkisini belirler; işteki görev (Şef, İşçi…) ayrıca, atamada seçilir.
+            @if (User.IsInRole(SystemRoles.SystemAdmin)) { <span>Rollerin neyi yapabileceği: <a href="/yetkiler">Yetkiler</a>.</span> }</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-primary" href="/toplu-yukleme/kullanicilar">@Ui.Icon("download") Toplu kullanıcı ekle (Excel)</a>
+        <a class="btn btn-primary" href="/kullanicilar/yeni">@Ui.Icon("plus") Yeni kullanıcı</a>
+    </div>
+</div>
+<div class="card"><div class="card-body p-0"><div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Ad soyad</th><th>Kullanıcı adı</th><th>Sistem rolleri</th><th>Birim kapsamı</th><th>Personel kaydı</th><th>Son giriş</th><th>Durum</th></tr></thead>
+        <tbody>
+            @foreach (var u in Model)
+            {
+                <tr class="@(u.IsActive ? "" : "text-secondary")">
+                    <td><a href="/kullanicilar/@u.Id" class="fw-semibold">@u.FullName</a></td>
+                    <td class="small">@u.UserName</td>
+                    <td>@foreach (var r in u.Roles) { <span class="badge text-bg-light border me-1">@SystemRoles.DisplayName(r)</span> }</td>
+                    <td class="small">@(u.Roles.Contains(SystemRoles.SystemAdmin) ? "Tüm birimler" : u.Unit is not null ? u.Unit
+                        : u.EmployeeName is not null ? "Personel kaydındaki birim" : "Atanmamış")</td>
+                    <td class="small">@(u.EmployeeName ?? "—")</td>
+                    <td class="small">@TrTime.Format(u.LastLoginAtUtc)</td>
+                    <td>@if (u.IsActive) { <span class="badge text-bg-success">Aktif</span> } else { <span class="badge text-bg-secondary">Pasif</span> }</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div></div></div>

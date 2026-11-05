@@ -1,0 +1,167 @@
+@model Saha360.Web.Controllers.ImportPageViewModel
+@{
+    var single = Model.Sheet is not null;
+    var title = single ? $"{Model.Sheet!.Name} · toplu ekleme (Excel)" : "Toplu Yükleme (Excel)";
+    ViewData["Title"] = title;
+    var r = Model.Result;
+    var templateUrl = "/toplu-yukleme/sablon" + (single ? $"?liste={Model.Slug}" : "");
+    var existingUrl = "/toplu-yukleme/sablon?mevcut=true" + (single ? $"&liste={Model.Slug}" : "");
+}
+@if (single)
+{
+    <nav class="small mb-1"><a href="@Model.BackUrl">@Model.BackLabel</a> › Toplu ekleme</nav>
+}
+<div class="page-head">
+    <div>
+        <h1 class="page-title">@title</h1>
+        <p class="text-secondary mb-0">
+            @if (single)
+            {
+                <span>Yalnız <b>@Model.Sheet!.Name.ToLower(TrTime.Culture)</b> listesi için şablon indirip yükleyin (@Model.Sheet.Purpose.ToLower(TrTime.Culture)).</span>
+            }
+            else
+            {
+                <span>@string.Join(", ", Model.Allowed.Select(s => s.Name)) listelerini tek Excel dosyasıyla ekleyin veya güncelleyin; bir birimi baştan kurmak için uygundur.</span>
+            }
+        </p>
+    </div>
+    @if (single) { <a class="btn btn-outline-secondary" href="@Model.BackUrl">‹ @Model.BackLabel</a> }
+</div>
+
+@if (r is not null)
+{
+    if (r.Committed)
+    {
+        <div class="alert alert-success" role="status">
+            @Ui.Icon("check") <b>@Model.FileName</b> yüklendi: toplam @r.TotalRows satır işlendi.
+            @if (single) { <a href="@Model.BackUrl" class="alert-link ms-1">@Model.BackLabel listesine dön ›</a> }
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-danger" role="alert">
+            @Ui.Icon("x") <b>Hiçbir kayıt yapılmadı.</b> Dosyada @r.Errors.Count hata var. Aşağıdaki satırları düzeltip dosyayı tekrar yükleyin.
+        </div>
+    }
+    <div class="row g-3 mb-3">
+        @if (r.Sheets.Count > 0)
+        {
+            <div class="col-lg-5">
+                <section class="card h-100">
+                    <div class="card-header">@(r.Committed ? "Sonuç" : "Hatalar düzeltilince yapılacaklar")</div>
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Sayfa</th><th class="text-end">Eklenen</th><th class="text-end">Güncellenen</th></tr></thead>
+                        <tbody>
+                            @foreach (var s in r.Sheets)
+                            {
+                                <tr><td>@s.Sheet</td><td class="text-end">@s.Added</td><td class="text-end">@s.Updated</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </section>
+            </div>
+        }
+        @if (r.Errors.Count > 0)
+        {
+            <div class="col-lg-7">
+                <section class="card h-100 border-danger">
+                    <div class="card-header text-danger">Hatalar (@r.Errors.Count)</div>
+                    <div class="table-responsive" style="max-height:420px">
+                        <table class="table table-sm mb-0">
+                            <thead><tr><th>Sayfa</th><th>Satır</th><th>Hata</th></tr></thead>
+                            <tbody>
+                                @foreach (var e in r.Errors.OrderBy(e => Array.FindIndex(ImportService.Sheets, s => s.Name == e.Sheet)).ThenBy(e => e.Row))
+                                {
+                                    <tr><td class="text-nowrap">@e.Sheet</td><td>@(e.Row > 0 ? e.Row.ToString() : "—")</td><td>@e.Message</td></tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+        }
+    </div>
+}
+
+<div class="row g-3">
+    <div class="col-lg-5">
+        <section class="card h-100">
+            <div class="card-header">1. Şablonu indirin</div>
+            <div class="card-body">
+                @if (single)
+                {
+                    <p>Yalnız <b>@Model.Sheet!.Name</b> sayfası ve açıklaması olan bir Excel dosyası. Zorunlu sütunlar turuncu.</p>
+                    <ul class="small mb-2">
+                        @foreach (var c in Model.Sheet.Columns)
+                        {
+                            <li><b>@c.Header</b>@(c.Required ? " *" : "")@(c.Note.Length > 0 ? " — " + c.Note : "")</li>
+                        }
+                    </ul>
+                }
+                else
+                {
+                    <p>Tek bir Excel dosyası; her liste için bir sayfa ve “Nasıl doldurulur” açıklaması içerir. Zorunlu sütunlar turuncu,
+                        Evet/Hayır sütunlarında açılır liste var.</p>
+                }
+                <div class="d-flex flex-wrap gap-2">
+                    <a class="btn btn-primary" href="@templateUrl">@Ui.Icon("download") Boş şablonu indir</a>
+                    <a class="btn btn-outline-primary" href="@existingUrl">@Ui.Icon("download") Mevcut kayıtlarla indir</a>
+                </div>
+                <p class="small text-secondary mt-2 mb-0">“Mevcut kayıtlarla” dosyası sistemdeki kayıtları içerir; düzenleyip geri yükleyerek toplu güncelleme yapabilirsiniz.
+                    Parolalar hiçbir zaman dışa aktarılmaz.</p>
+            </div>
+        </section>
+    </div>
+    <div class="col-lg-7">
+        <section class="card h-100">
+            <div class="card-header">2. Doldurup yükleyin</div>
+            <div class="card-body">
+                <form method="post" action="/toplu-yukleme" enctype="multipart/form-data" class="d-flex flex-wrap gap-2 align-items-end">
+                    @if (single) { <input type="hidden" name="liste" value="@Model.Slug" /> }
+                    <div class="flex-grow-1">
+                        <label class="form-label" for="file">Excel dosyası (.xlsx, en fazla 5 MB)</label>
+                        <input id="file" type="file" name="file" class="form-control" required
+                               accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+                    </div>
+                    <button class="btn btn-primary" type="submit">@Ui.Icon("check") Yükle</button>
+                </form>
+                <ul class="small text-secondary mt-3 mb-0">
+                    @if (single)
+                    {
+                        <li>Dosyada başka sayfalar olsa bile yalnız <b>@Model.Sheet!.Name</b> sayfası işlenir.</li>
+                        @if (Model.Sheet.Columns.Any(c => c.ListFrom is not null))
+                        {
+                            <li>Birim, ekip ve unvan gibi başvurulan kayıtların sistemde olması gerekir (açılır listede önerilir).
+                                Hepsini birlikte kurmak için <a href="/toplu-yukleme">tüm listeler tek dosyada</a> ekranını kullanın.</li>
+                        }
+                    }
+                    else
+                    {
+                        <li>Sayfalar sırayla işlenir: @string.Join(" → ", Model.Allowed.Select(s => s.Name)). Aynı dosyada birbirine başvurabilirler.</li>
+                    }
+                    <li>Aynı anahtarla kayıt varsa <b>güncellenir</b>, çoğaltılmaz: birim/unvan/kategori/bölge → ad, malzeme → kod,
+                        ekip → birim + ad, personel → sicil no, kullanıcı → kullanıcı adı.</li>
+                    <li><b>Hepsi ya da hiçbiri:</b> bir satırda hata varsa hiçbir kayıt yapılmaz; hatalar sayfa ve satır numarasıyla listelenir.</li>
+                    <li>Kayıt silinmez; kullanılmayacak kaydı “Aktif = Hayır” ile pasife alın.</li>
+                    @if (!single || Model.Sheet!.Name == ImportService.SUsers)
+                    {
+                        <li>Kullanıcı parolası içeren dosyayı yükledikten sonra silin.</li>
+                    }
+                </ul>
+            </div>
+        </section>
+    </div>
+</div>
+
+@if (!single && Model.Allowed.Count > 1)
+{
+    <section class="card mt-3">
+        <div class="card-header">Yalnız bir listeyi mi ekleyeceksiniz?</div>
+        <div class="card-body d-flex flex-wrap gap-2">
+            @foreach (var s in Model.Allowed)
+            {
+                <a class="btn btn-sm btn-outline-secondary" href="/toplu-yukleme/@ImportService.SlugOf(s.Name)">@s.Name</a>
+            }
+        </div>
+    </section>
+}

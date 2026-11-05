@@ -1,0 +1,136 @@
+@{
+    ViewData["Title"] = "Tanımlar";
+    var tab = ViewData["Tab"] as string ?? "birimler";
+    var canEdit = ViewData["CanEdit"] as bool? ?? false;
+    var units = (List<OrganizationUnit>)ViewData["Units"]!;
+    var roles = (List<JobRole>)ViewData["Roles"]!;
+    var cats = (List<WorkCategory>)ViewData["Categories"]!;
+    var locs = (List<WorkLocation>)ViewData["Locations"]!;
+    var tabs = new[] { ("birimler", "Birimler / müdürlükler"), ("roller", "Görev rolleri / unvanlar"), ("kategoriler", "İş kategorileri"), ("bolgeler", "Bölgeler / sahalar") };
+}
+<div class="page-head">
+    <div>
+        <h1 class="page-title">Tanımlar</h1>
+        <p class="text-secondary mb-0">Tanımlar silinmez; kullanılmayacaksa pasife alınır. @(canEdit ? "" : "Değişiklik için birim veya sistem yöneticisi yetkisi gerekir.")</p>
+    </div>
+    <a href="/tanimlar/ekipler" class="btn btn-outline-primary">Ekipler ve şefler ›</a>
+</div>
+<ul class="nav nav-tabs">
+    @foreach (var (key, label) in tabs) { <li class="nav-item"><a class="nav-link @(tab == key ? "active" : "")" href="/tanimlar?tab=@key">@label</a></li> }
+</ul>
+<div class="card card-tabbed"><div class="card-body">
+    @{
+        var importSlug = tab switch { "roller" => "unvanlar", "kategoriler" => "kategoriler", "bolgeler" => "bolgeler", _ => "birimler" };
+        var importLabel = tab switch { "roller" => "unvan", "kategoriler" => "kategori", "bolgeler" => "bölge", _ => "birim" };
+    }
+    @if (canEdit)
+    {
+        <div class="d-flex justify-content-end mb-2">
+            <a class="btn btn-sm btn-outline-primary" href="/toplu-yukleme/@importSlug">@Ui.Icon("download") Toplu @importLabel ekle (Excel)</a>
+        </div>
+    }
+    @if (tab == "roller")
+    {
+        <div class="row g-3 mb-3">
+            <div class="col-md-6">
+                <div class="help-box">
+                    <div class="fw-semibold">Herkes atanabilir</div>
+                    <div class="small">
+                        <b>Kapalı (varsayılan):</b> iş ekranında bu alana yalnız unvanı bu olan personel konabilir.
+                        Ör. “Şef” alanına yalnız unvanı Şef olanlar; Tekniker olan Ali Şef alanına konamaz.<br />
+                        <b>Açık:</b> unvan şartı aranmaz. Ör. <b>Şoför</b> açıksa işçi de, tekniker de o işte şoför olarak atanabilir.
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="help-box">
+                    <div class="fw-semibold">Ekip lideri</div>
+                    <div class="small">
+                        İşi sahada yöneten rol (genellikle <b>Şef</b>). İşaretliyse iş ekranında en üstte görünür, yeni bir işte hazır açık gelir
+                        ve ekipte lider yoksa uyarı çıkar. <b>Onay yetkisi vermez</b>; tamamlanma onayını işin “Sorumlu şef”i verir.
+                    </div>
+                </div>
+            </div>
+        </div>
+        <table class="table align-middle">
+            <thead><tr><th style="width:90px">Sıra</th><th>Ad</th><th title="Unvan şartı aranmaz">Herkes atanabilir</th><th title="İş ekranında en üstte, yeni işte hazır açık">Ekip lideri</th><th>Aktif</th><th></th></tr></thead>
+            <tbody>
+                @if (roles.Count == 0)
+                {
+                    <tr><td colspan="6" class="text-secondary">Henüz unvan yok. Aşağıdan ekleyin veya Excel ile toplu yükleyin.</td></tr>
+                }
+                @for (var i = 0; i < roles.Count; i++)
+                {
+                    var r = roles[i];
+                    var fid = $"r{r.Id}";
+                    <tr>
+                        <td class="text-nowrap">
+                            <span class="text-secondary me-1">@(i + 1).</span>
+                            @if (canEdit)
+                            {
+                                <form method="post" action="/tanimlar/roller/@r.Id/tasi?yon=yukari" class="d-inline">
+                                    <button class="btn btn-sm btn-link p-0 px-1" type="submit" disabled="@(i == 0)" title="Yukarı taşı" aria-label="@r.Name yukarı taşı">▲</button>
+                                </form>
+                                <form method="post" action="/tanimlar/roller/@r.Id/tasi?yon=asagi" class="d-inline">
+                                    <button class="btn btn-sm btn-link p-0 px-1" type="submit" disabled="@(i == roles.Count - 1)" title="Aşağı taşı" aria-label="@r.Name aşağı taşı">▼</button>
+                                </form>
+                            }
+                        </td>
+                        <td><input form="@fid" name="name" value="@r.Name" class="form-control form-control-sm" disabled="@(!canEdit)" aria-label="Ad" /></td>
+                        <td><input form="@fid" type="checkbox" name="isOpenToAll" value="true" class="form-check-input" checked="@r.IsOpenToAll" disabled="@(!canEdit)" aria-label="Herkes atanabilir" /></td>
+                        <td><input form="@fid" type="checkbox" name="isLeadRole" value="true" class="form-check-input" checked="@r.IsLeadRole" disabled="@(!canEdit)" aria-label="Ekip lideri" /></td>
+                        <td><input form="@fid" type="checkbox" name="isActive" value="true" class="form-check-input" checked="@r.IsActive" disabled="@(!canEdit)" aria-label="Aktif" /></td>
+                        <td>@if (canEdit) { <form id="@fid" method="post" action="/tanimlar/roller"><input type="hidden" name="id" value="@r.Id" /><button class="btn btn-sm btn-outline-primary" type="submit">Kaydet</button></form> }</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        @if (canEdit)
+        {
+            <form method="post" action="/tanimlar/roller" class="row g-2 align-items-end border-top pt-3">
+                <div class="col-md-5"><label class="form-label small" for="nr">Yeni unvan / ekip alanı</label><input id="nr" name="name" class="form-control" required placeholder="ör. Mühendis" /></div>
+                <div class="col-md-5">
+                    <div class="form-check"><input type="checkbox" name="isOpenToAll" value="true" class="form-check-input" id="no" /><label class="form-check-label" for="no">Herkes atanabilir (unvan şartı yok, ör. Şoför)</label></div>
+                    <div class="form-check"><input type="checkbox" name="isLeadRole" value="true" class="form-check-input" id="nl" /><label class="form-check-label" for="nl">Ekip lideri (ör. Şef)</label></div>
+                </div>
+                <input type="hidden" name="isActive" value="true" />
+                <div class="col-md-2"><button class="btn btn-primary w-100" type="submit">Ekle</button></div>
+                <div class="col-12 small text-secondary">Yeni unvan listenin sonuna eklenir; sırasını ▲ ▼ ile değiştirebilirsiniz.</div>
+            </form>
+        }
+    }
+    else
+    {
+        var items = tab switch
+        {
+            "kategoriler" => cats.Cast<DefinitionEntity>().ToList(),
+            "bolgeler" => locs.Cast<DefinitionEntity>().ToList(),
+            _ => units.Cast<DefinitionEntity>().ToList()
+        };
+        var key = tab is "kategoriler" or "bolgeler" ? tab : "birimler";
+        <table class="table align-middle">
+            <thead><tr><th>Ad</th>@if (key == "birimler") { <th>Kod</th> }<th>Aktif</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var d in items)
+                {
+                    var fid = $"d{d.Id}";
+                    <tr>
+                        <td><input form="@fid" name="name" value="@d.Name" class="form-control form-control-sm" disabled="@(!canEdit)" aria-label="Ad" /></td>
+                        @if (d is OrganizationUnit ou) { <td style="width:140px"><input form="@fid" name="code" value="@ou.Code" class="form-control form-control-sm" disabled="@(!canEdit)" aria-label="Kod" /></td> }
+                        <td><input form="@fid" type="checkbox" name="isActive" value="true" class="form-check-input" checked="@d.IsActive" disabled="@(!canEdit)" aria-label="Aktif" /></td>
+                        <td>@if (canEdit) { <form id="@fid" method="post" action="/tanimlar/@key"><input type="hidden" name="id" value="@d.Id" /><button class="btn btn-sm btn-outline-primary" type="submit">Kaydet</button></form> }</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        @if (canEdit)
+        {
+            <form method="post" action="/tanimlar/@key" class="row g-2 align-items-end border-top pt-3">
+                <div class="col-md-6"><label class="form-label small" for="nn">Yeni kayıt</label><input id="nn" name="name" class="form-control" required /></div>
+                @if (key == "birimler") { <div class="col-md-3"><label class="form-label small" for="nc">Kod</label><input id="nc" name="code" class="form-control" /></div> }
+                <input type="hidden" name="isActive" value="true" />
+                <div class="col-md-3"><button class="btn btn-primary w-100" type="submit">Ekle</button></div>
+            </form>
+        }
+    }
+</div></div>

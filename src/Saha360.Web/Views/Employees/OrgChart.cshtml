@@ -1,0 +1,71 @@
+@model List<DefinitionService.OrgUnit>
+@{
+    ViewData["Title"] = "Organizasyon Şeması";
+    var lk = (Lookups)ViewData["Lookups"]!;
+    var unitId = ViewData["UnitId"] as int?;
+    var me = (UserContext)ViewData["Me"]!;
+    var pasif = Context.Request.Query["pasif"] == "true";
+}
+<div class="page-head">
+    <div>
+        <h1 class="page-title">Organizasyon Şeması</h1>
+        <p class="text-secondary mb-0">Birim → ekip (şef) → personel. @(me.AllUnits ? "Tüm birimler görünüyor." : "Yalnız kendi biriminiz görünüyor.")</p>
+    </div>
+    <form method="get" class="d-flex gap-2 align-items-center flex-wrap">
+        @if (lk.Units.Count > 1)
+        {
+            <select name="unitId" class="form-select" aria-label="Birim" onchange="this.form.submit()">
+                <option value="">Tüm birimlerim</option>
+                @foreach (var o in lk.Units) { <option value="@o.Id" selected="@(unitId == o.Id)">@o.Name</option> }
+            </select>
+        }
+        <div class="form-check text-nowrap"><input class="form-check-input" type="checkbox" name="pasif" value="true" id="op" checked="@pasif" onchange="this.form.submit()" /><label class="form-check-label" for="op">Pasifler</label></div>
+    </form>
+</div>
+
+@if (Model.Count == 0)
+{
+    <div class="empty card card-body">@Ui.Icon("grid", "big")
+        <div>Görüntülenecek birim yok.</div>
+        <div class="small">Hesabınıza bir birim atanmamış ve bağlı personel kaydınız yok. Sistem yöneticisinden "Birim kapsamı" isteyin.</div></div>
+}
+
+@foreach (var unit in Model)
+{
+    <section class="card mb-3 org-unit">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span>@unit.Name @if (unit.Code is not null) { <span class="text-secondary small">· @unit.Code</span> } @if (!unit.IsActive) { <span class="badge text-bg-secondary">Pasif</span> }</span>
+            <span class="small text-secondary">@unit.Teams.Count ekip · @unit.PersonCount kişi
+                · <a href="/personel?unitId=@unit.Id">listede aç</a>
+                @if (me.CanAssign) { <span>· <a href="/havuz?unitId=@unit.Id&durum=Available">havuz</a></span> }</span>
+        </div>
+        <div class="card-body">
+            <div class="org-teams">
+                @foreach (var t in unit.Teams)
+                {
+                    <div class="org-team @(t.IsActive ? "" : "inactive")">
+                        <div class="d-flex justify-content-between align-items-start gap-2">
+                            <a class="fw-semibold" href="/tanimlar/ekipler/@t.Id">@t.Name</a>
+                            <span class="badge text-bg-light border">@t.Members.Count</span>
+                        </div>
+                        <div class="small mb-1">@Ui.Icon("flag") Şef: <b>@(t.SupervisorName ?? "—")</b></div>
+                        <ul class="org-people">
+                            @foreach (var p in t.Members) { <partial name="_OrgPerson" model="p" /> }
+                            @if (t.Members.Count == 0) { <li class="text-secondary small">Üye yok</li> }
+                        </ul>
+                    </div>
+                }
+                @if (unit.Unassigned.Count > 0 || unit.Teams.Count == 0)
+                {
+                    <div class="org-team unassigned">
+                        <div class="fw-semibold">Ekibi olmayanlar</div>
+                        <ul class="org-people">
+                            @foreach (var p in unit.Unassigned) { <partial name="_OrgPerson" model="p" /> }
+                            @if (unit.Unassigned.Count == 0) { <li class="text-secondary small">Yok</li> }
+                        </ul>
+                    </div>
+                }
+            </div>
+        </div>
+    </section>
+}

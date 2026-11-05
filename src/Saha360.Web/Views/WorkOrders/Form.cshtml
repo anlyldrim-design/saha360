@@ -1,0 +1,152 @@
+@model WorkFormViewModel
+@{
+    var isNew = Model.Existing is null;
+    ViewData["Title"] = isNew ? "Yeni iş" : $"{Model.Existing!.WorkNumber} düzenle";
+    var i = Model.Input;
+    var action = isNew ? "/isler/yeni" : $"/isler/{Model.Existing!.Id}/duzenle";
+}
+<div class="page-head">
+    <div>
+        <h1 class="page-title">@(isNew ? "Yeni İş Oluştur" : $"{Model.Existing!.WorkNumber} · Düzenle")</h1>
+        <p class="text-secondary mb-0">@(isNew ? "İş taslak olarak kaydedilir; personele gönderilene kadar kimseye bildirim gitmez." : "Ekipteki personele değişiklik bildirimi gider.")</p>
+    </div>
+</div>
+
+<form method="post" action="@action" enctype="multipart/form-data" class="work-form" novalidate>
+    @if (!isNew) { <input type="hidden" name="version" value="@Model.Existing!.UpdatedAtUtc.Ticks" /> }
+    <div asp-validation-summary="All" class="alert alert-danger" role="alert"></div>
+
+    <section class="card mb-3">
+        <div class="card-header">A. İş bilgileri</div>
+        <div class="card-body row g-3">
+            <div class="col-md-8">
+                <label class="form-label" for="Title">İş başlığı <span class="text-danger">*</span></label>
+                <input id="Title" name="Title" value="@i.Title" class="form-control" maxlength="200" required />
+                <span class="text-danger small">@ViewData.ModelState["Title"]?.Errors.FirstOrDefault()?.ErrorMessage</span>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" for="Priority">Öncelik</label>
+                <select id="Priority" name="Priority" class="form-select">
+                    @foreach (var p in Enum.GetValues<WorkPriority>()) { <option value="@p" selected="@(i.Priority == p)">@TrNames.Of(p)</option> }
+                </select>
+            </div>
+            <div class="col-12">
+                <label class="form-label" for="Description">Açıklama</label>
+                <textarea id="Description" name="Description" class="form-control" rows="3" maxlength="4000">@i.Description</textarea>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" for="WorkCategoryId">Kategori</label>
+                <select id="WorkCategoryId" name="WorkCategoryId" class="form-select"><option value="">—</option>
+                    @foreach (var o in Model.Lookups.Categories) { <option value="@o.Id" selected="@(i.WorkCategoryId == o.Id)">@o.Name</option> }
+                </select>
+            </div>
+            <div class="col-6 col-md-4">
+                <label class="form-label" for="PlannedStartLocal">Planlanan başlangıç <span class="text-danger">*</span></label>
+                <input type="datetime-local" id="PlannedStartLocal" name="PlannedStartLocal" class="form-control" required
+                       value="@i.PlannedStartLocal?.ToString("yyyy-MM-ddTHH:mm")" />
+            </div>
+            <div class="col-6 col-md-4">
+                <label class="form-label" for="PlannedEndLocal">Planlanan bitiş <span class="text-danger">*</span></label>
+                <input type="datetime-local" id="PlannedEndLocal" name="PlannedEndLocal" class="form-control" required
+                       value="@i.PlannedEndLocal?.ToString("yyyy-MM-ddTHH:mm")" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" for="WorkLocationId">Bölge / saha</label>
+                <select id="WorkLocationId" name="WorkLocationId" class="form-select"><option value="">—</option>
+                    @foreach (var o in Model.Lookups.Locations) { <option value="@o.Id" selected="@(i.WorkLocationId == o.Id)">@o.Name</option> }
+                </select>
+            </div>
+            <div class="col-md-8">
+                <label class="form-label" for="LocationText">Adres / konum tarifi</label>
+                <input id="LocationText" name="LocationText" value="@i.LocationText" class="form-control" maxlength="300" placeholder="ör. Atatürk Cad. No: 45 önü" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" for="ResponsibleUnitId">Sorumlu birim <span class="text-danger">*</span></label>
+                <select id="ResponsibleUnitId" name="ResponsibleUnitId" class="form-select" required><option value="">Seçin</option>
+                    @foreach (var o in Model.Lookups.Units) { <option value="@o.Id" selected="@(i.ResponsibleUnitId == o.Id)">@o.Name</option> }
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" for="ResponsibleSupervisorEmployeeId">Sorumlu şef (onaylayacak)</label>
+                <select id="ResponsibleSupervisorEmployeeId" name="ResponsibleSupervisorEmployeeId" class="form-select"><option value="">— Sonra seçilecek —</option>
+                    @foreach (var o in Model.Lookups.Supervisors) { <option value="@o.Id" selected="@(i.ResponsibleSupervisorEmployeeId == o.Id)">@o.Name</option> }
+                </select>
+                <div class="form-text">İş personele gönderilmeden önce seçilmeli.</div>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" for="ManagerUserId">Bilgilendirilecek yönetici</label>
+                <select id="ManagerUserId" name="ManagerUserId" class="form-select">
+                    @foreach (var m in Model.Lookups.Managers) { <option value="@m.Id" selected="@(i.ManagerUserId == m.Id)">@m.Name</option> }
+                </select>
+                <div class="form-text">Şef onayından sonra bildirim alır.</div>
+            </div>
+        </div>
+    </section>
+
+    <section class="card mb-3">
+        <div class="card-header">B. Notlar ve saha talimatı</div>
+        <div class="card-body">
+            <label class="form-label" for="Instructions">Personelin okuyup onaylayacağı kısa talimat</label>
+            <textarea id="Instructions" name="Instructions" class="form-control" rows="2" maxlength="1000" placeholder="ör. Kazı öncesi ikaz bandı çekin.">@i.Instructions</textarea>
+            <div class="form-text">Personel işi kabul ederken bu talimatı okuduğunu onaylar.</div>
+        </div>
+    </section>
+
+    @if (isNew)
+    {
+        <section class="card mb-3">
+            <details class="material-panel" id="materialPanel">
+                <summary class="card-header">C. Malzemeler <span class="text-secondary small fw-normal">(isteğe bağlı — açmak için tıklayın)</span> <span class="badge text-bg-secondary ms-1" id="matCount">0</span></summary>
+                <div class="card-body">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-6">
+                            <label class="form-label small" for="matSelect">Katalogdan malzeme</label>
+                            <input class="form-control" list="matList" id="matSelect" placeholder="Ad veya kod yazın…" autocomplete="off" />
+                            <datalist id="matList">
+                                @foreach (var m in Model.Materials) { <option value="@m.Code · @m.Name" data-id="@m.Id" data-unit="@m.Unit"></option> }
+                            </datalist>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small" for="matQty">Miktar <span id="matUnit" class="text-secondary"></span></label>
+                            <input class="form-control" id="matQty" type="text" inputmode="decimal" placeholder="ör. 2,5" />
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <button type="button" class="btn btn-outline-primary w-100" id="matAdd">@Ui.Icon("plus") İşe ekle</button>
+                        </div>
+                    </div>
+                    <div class="text-danger small mt-1" id="matError" role="alert"></div>
+                    <table class="table table-sm mt-3 mb-0" id="matTable" hidden>
+                        <thead><tr><th>Malzeme</th><th class="text-end">Miktar</th><th>Birim</th><th></th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                    <p class="small text-secondary mt-2 mb-0">Aynı malzeme tekrar eklenirse miktarı birleştirilir. Stok düşülmez; yalnız işte bildirilen tüketim kaydedilir.</p>
+                </div>
+            </details>
+        </section>
+
+        <section class="card mb-3">
+            <div class="card-header">D. Fotoğraf ve ek dosyalar</div>
+            <div class="card-body">
+                <input type="file" name="photos" class="form-control" multiple accept="@Saha360.Infrastructure.FileStorage.FileValidator.AcceptAttribute" capture="environment" />
+                <div class="form-text">JPG, PNG, WEBP veya PDF · dosya başına en fazla 10 MB. Telefonda kameradan da çekebilirsiniz.</div>
+            </div>
+        </section>
+    }
+
+    <div class="sticky-actions">
+        <a href="@(isNew ? "/isler" : $"/isler/{Model.Existing!.Id}")" class="btn btn-outline-secondary" data-confirm="Kaydedilmemiş değişiklikler kaybolacak. Vazgeçilsin mi?">Vazgeç</a>
+        @if (isNew)
+        {
+            <button type="submit" name="next" value="taslak" class="btn btn-outline-primary">Taslak olarak kaydet</button>
+            <button type="submit" name="next" value="ekip" class="btn btn-primary">Kaydet ve ekip ata ›</button>
+        }
+        else
+        {
+            <button type="submit" class="btn btn-primary">Değişiklikleri kaydet</button>
+        }
+    </div>
+</form>
+
+@section Scripts {
+    <script src="~/js/work-form.js" asp-append-version="true"></script>
+}

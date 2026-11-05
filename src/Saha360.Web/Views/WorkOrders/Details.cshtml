@@ -1,0 +1,438 @@
+@model WorkDetail
+@{
+    var w = Model.Work;
+    ViewData["Title"] = $"{w.WorkNumber} · {w.Title}";
+    var materials = ViewData["Materials"] as List<MaterialCatalog> ?? [];
+    var activeTeam = Model.Assignments.Where(a => a.ReleasedAtUtc is null).ToList();
+    var pastTeam = Model.Assignments.Where(a => a.ReleasedAtUtc is not null).ToList();
+    var photos = Model.Attachments.Where(a => a.IsImage).ToList();
+    var docs = Model.Attachments.Where(a => !a.IsImage).ToList();
+    var mine = Model.MyAssignment;
+    // Tamamlanan işte ekip serbest bırakılır; başlıkta işi yapan kişi sayısı gösterilir.
+    var teamCount = activeTeam.Count > 0 ? activeTeam.Count : Model.Assignments.Count(a => a.Status == AssignmentStatus.Finished);
+}
+<nav aria-label="breadcrumb" class="small mb-1"><a href="/isler">İşler</a> › @w.WorkNumber</nav>
+<div class="work-head card mb-3">
+    <div class="card-body">
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-1">
+            <span class="work-no">@w.WorkNumber</span> @Ui.Status(w.Status) @Ui.Priority(w.Priority) @Ui.Overdue(Model.IsOverdue)
+        </div>
+        <h1 class="h4 mb-2">@w.Title</h1>
+        <div class="meta">
+            <span>@Ui.Icon("calendar") @TrTime.Range(w.PlannedStartAtUtc, w.PlannedEndAtUtc)</span>
+            <span>@Ui.Icon("pin") @(Model.LocationName ?? "")@(Model.LocationName is not null && w.LocationText is not null ? " · " : "")@(w.LocationText ?? (Model.LocationName is null ? "Konum belirtilmemiş" : ""))</span>
+            <span>@Ui.Icon("flag") Şef: @(Model.SupervisorName ?? "seçilmedi")</span>
+            <span>@Ui.Icon("users") @teamCount kişi</span>
+        </div>
+    </div>
+</div>
+
+@* ─────────── Eylemler: role ve duruma göre. Sunucu her eylemi yeniden denetler. ─────────── *@
+@{
+    var anyAction = Model.CanAccept || Model.CanReject || Model.CanStart || Model.CanSubmit || Model.AwaitsMyApproval || Model.CanPlanTeam || Model.CanEdit || Model.CanCancel || Model.CanReopen;
+}
+@if (anyAction)
+{
+    <div class="action-bar card mb-3">
+        <div class="card-body d-flex flex-wrap gap-2 align-items-center">
+            @if (mine is not null && mine.ReleasedAtUtc is null)
+            {
+                <span class="me-2 small">Bu işteki göreviniz: <b>@mine.JobRoleName</b> · @Ui.Assignment(mine.Status)</span>
+            }
+            @if (Model.CanAccept)
+            {
+                <form method="post" action="/isler/@w.Id/kabul" class="d-flex flex-wrap gap-2 align-items-center">
+                    @if (!string.IsNullOrWhiteSpace(w.Instructions))
+                    {
+                        <div class="form-check mb-0">
+                            <input class="form-check-input" type="checkbox" id="ack" required />
+                            <label class="form-check-label small" for="ack">Saha talimatını okudum</label>
+                        </div>
+                    }
+                    <button class="btn btn-success" type="submit">@Ui.Icon("check") İşi kabul et</button>
+                </form>
+            }
+            @if (Model.CanReject)
+            {
+                <button class="btn btn-outline-danger" type="button" data-bs-toggle="modal" data-bs-target="#rejectModal">@Ui.Icon("x") İşi reddet</button>
+            }
+            @if (Model.CanStart)
+            {
+                <form method="post" action="/isler/@w.Id/basla"><button class="btn btn-primary" type="submit">@Ui.Icon("play") Çalışmaya başladım</button></form>
+            }
+            @if (Model.CanSubmit)
+            {
+                <button class="btn btn-success" type="button" data-bs-toggle="modal" data-bs-target="#submitModal">@Ui.Icon("send") Tamamlandı olarak şefe gönder</button>
+            }
+            @if (Model.AwaitsMyApproval)
+            {
+                <button class="btn btn-success" type="button" data-bs-toggle="modal" data-bs-target="#approveModal">@Ui.Icon("check") Onayla</button>
+                <button class="btn btn-outline-danger" type="button" data-bs-toggle="modal" data-bs-target="#returnModal">@Ui.Icon("undo") Düzeltme için iade et</button>
+                <button class="btn btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#infoModal">@Ui.Icon("comment") Ek bilgi iste</button>
+            }
+            <span class="flex-grow-1"></span>
+            @if (Model.CanPlanTeam)
+            {
+                <a class="btn @(w.Status is WorkStatus.Draft or WorkStatus.AwaitingAssignment ? "btn-primary" : "btn-outline-primary")" href="/havuz?isId=@w.Id">
+                    @Ui.Icon("users") @(w.Status == WorkStatus.Draft ? "Ekip ata ve personele gönder" : w.Status == WorkStatus.AwaitingAssignment ? "Yeniden ata" : "Ekibi düzenle")
+                </a>
+            }
+            @if (Model.CanEdit)
+            {
+                <a class="btn btn-outline-secondary" href="/isler/@w.Id/duzenle">@Ui.Icon("edit") Düzenle</a>
+            }
+            @if (Model.CanReopen)
+            {
+                <span class="small text-secondary">İş @(w.Status == WorkStatus.Completed ? "tamamlandı" : "iptal edildi"). Gerekirse yeniden açıp ekibi tekrar atayabilirsiniz.</span>
+                <button class="btn btn-warning" type="button" data-bs-toggle="modal" data-bs-target="#reopenModal">@Ui.Icon("undo") Yeniden aç</button>
+            }
+            @if (Model.CanCancel)
+            {
+                <button class="btn btn-outline-danger" type="button" data-bs-toggle="modal" data-bs-target="#cancelModal">@Ui.Icon("trash") İptal et</button>
+            }
+        </div>
+    </div>
+}
+
+@if (w.Status == WorkStatus.CompletionApprovalPending && w.CompletionNote is not null)
+{
+    <div class="alert alert-warning">
+        <b>Tamamlanma bildirimi</b> · @TrTime.Format(w.CompletionSubmittedAtUtc)<br />@w.CompletionNote
+    </div>
+}
+
+<ul class="nav nav-tabs work-tabs" role="tablist">
+    <li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#genel" type="button" role="tab">Genel Bakış</button></li>
+    <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#ekip" type="button" role="tab">Ekip <span class="badge text-bg-light">@teamCount</span></button></li>
+    <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#malzemeler" type="button" role="tab">Malzemeler <span class="badge text-bg-light">@Model.Materials.Count</span></button></li>
+    <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#dosyalar" type="button" role="tab">Fotoğraflar <span class="badge text-bg-light">@Model.Attachments.Count</span></button></li>
+    <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#notlar" type="button" role="tab">Notlar <span class="badge text-bg-light">@Model.Notes.Count</span></button></li>
+    <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#gecmis" type="button" role="tab">İşlem Geçmişi</button></li>
+</ul>
+
+<div class="tab-content card card-tabbed">
+    <div class="tab-pane fade show active card-body" id="genel" role="tabpanel">
+        <div class="row g-4">
+            <div class="col-lg-7">
+                <h2 class="h6 text-secondary">Açıklama</h2>
+                <p class="pre">@(w.Description ?? "—")</p>
+                @if (!string.IsNullOrWhiteSpace(w.Instructions))
+                {
+                    <h2 class="h6 text-secondary">Saha talimatı</h2>
+                    <div class="instruction">@w.Instructions</div>
+                }
+            </div>
+            <div class="col-lg-5">
+                <dl class="kv">
+                    <dt>Kategori</dt><dd>@(Model.CategoryName ?? "—")</dd>
+                    <dt>Sorumlu birim</dt><dd>@Model.UnitName</dd>
+                    <dt>Sorumlu şef</dt><dd>@(Model.SupervisorName ?? "—")</dd>
+                    <dt>Bilgilendirilecek yönetici</dt><dd>@(Model.ManagerName ?? "—")</dd>
+                    <dt>Oluşturan</dt><dd>@Model.CreatedByName · @TrTime.Format(w.CreatedAtUtc)</dd>
+                    <dt>Planlanan</dt><dd>@TrTime.Range(w.PlannedStartAtUtc, w.PlannedEndAtUtc) <span class="text-secondary">(@TrTime.Duration(w.PlannedEndAtUtc - w.PlannedStartAtUtc))</span></dd>
+                    <dt>Gerçek başlangıç</dt><dd>@TrTime.Format(w.ActualStartAtUtc)</dd>
+                    <dt>Tamamlanma bildirimi</dt><dd>@TrTime.Format(w.CompletionSubmittedAtUtc)</dd>
+                    <dt>Şef onayı</dt><dd>@TrTime.Format(w.CompletedAtUtc)</dd>
+                    @if (w.ActualStartAtUtc is DateTime s && w.CompletionSubmittedAtUtc is DateTime e)
+                    {
+                        <dt>Gerçekleşen süre</dt><dd>@TrTime.Duration(e - s)</dd>
+                    }
+                    <dt>Son güncelleme</dt><dd>@TrTime.Format(w.UpdatedAtUtc)</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-pane fade card-body" id="ekip" role="tabpanel">
+        @if (activeTeam.Count == 0)
+        {
+            <div class="empty">@Ui.Icon("users", "big") <div>Ekipte kimse yok.</div>
+                @if (Model.CanPlanTeam) { <a href="/havuz?isId=@w.Id" class="btn btn-primary btn-sm mt-2">Havuzdan personel ata</a> }</div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead><tr><th>Personel</th><th>İşteki rolü</th><th>Durum</th><th>Atanma</th><th>Yanıt</th><th>Çalışma başlangıcı</th></tr></thead>
+                    <tbody>
+                        @foreach (var a in activeTeam)
+                        {
+                            <tr>
+                                <td>@a.EmployeeName @if (!a.HasAccount) { <span class="badge text-bg-light border" title="Uygulama hesabı yok; planlamacı adına kabul edilir">hesapsız</span> }
+                                    @if (a.TaskNote is not null) { <div class="small text-secondary">@a.TaskNote</div> }</td>
+                                <td>@if (a.IsLeadRole) { <b>@a.JobRoleName</b> } else { @a.JobRoleName }</td>
+                                <td>@Ui.Assignment(a.Status) @if (a.InstructionAckAtUtc is not null) { <span class="small text-success" title="Talimatı okudu">✓ talimat</span> }</td>
+                                <td class="small">@TrTime.Format(a.AssignedAtUtc)</td>
+                                <td class="small">@TrTime.Format(a.RespondedAtUtc)</td>
+                                <td class="small">@TrTime.Format(a.StartedAtUtc)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        @if (pastTeam.Count > 0)
+        {
+            <h2 class="h6 text-secondary mt-3">Ayrılan / reddeden / tamamlayan</h2>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead><tr><th>Personel</th><th>Rol</th><th>Durum</th><th>Atanma</th><th>Ayrılma</th><th>Neden</th></tr></thead>
+                    <tbody>
+                        @foreach (var a in pastTeam)
+                        {
+                            <tr>
+                                <td>@a.EmployeeName</td><td>@a.JobRoleName</td><td>@Ui.Assignment(a.Status)</td>
+                                <td class="small">@TrTime.Format(a.AssignedAtUtc)</td><td class="small">@TrTime.Format(a.ReleasedAtUtc)</td>
+                                <td class="small">@(a.RejectionReason ?? a.ReleaseReason)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+
+    <div class="tab-pane fade card-body" id="malzemeler" role="tabpanel">
+        @if (Model.CanContribute && materials.Count > 0)
+        {
+            <details class="material-panel mb-3">
+                <summary class="btn btn-outline-primary btn-sm">@Ui.Icon("plus") Malzeme kullanımı kaydet</summary>
+                <form method="post" action="/isler/@w.Id/malzeme" class="row g-2 align-items-end mt-2">
+                    <div class="col-md-5">
+                        <label class="form-label small" for="materialId">Malzeme</label>
+                        <select id="materialId" name="materialId" class="form-select" required>
+                            <option value="">Seçin…</option>
+                            @foreach (var g in materials.GroupBy(m => m.Category ?? "Diğer"))
+                            {
+                                <optgroup label="@g.Key">
+                                    @foreach (var m in g) { <option value="@m.Id">@m.Name (@m.Unit) · @m.Code</option> }
+                                </optgroup>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small" for="quantity">Miktar</label>
+                        <input id="quantity" name="quantity" class="form-control" inputmode="decimal" required placeholder="ör. 2,5" />
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label small" for="mnote">Not</label>
+                        <input id="mnote" name="note" class="form-control" maxlength="500" />
+                    </div>
+                    <div class="col-md-2"><button class="btn btn-primary w-100" type="submit">İşe ekle</button></div>
+                </form>
+            </details>
+        }
+        @if (Model.Materials.Count == 0)
+        {
+            <div class="empty">@Ui.Icon("box", "big") <div>Bu işte malzeme kaydı yok.</div></div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead><tr><th>Malzeme</th><th class="text-end">Miktar</th><th>Birim</th><th>Ekleyen</th><th>Kayıt</th><th>Not</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var m in Model.Materials)
+                        {
+                            <tr>
+                                <td>@m.Name</td><td class="text-end">@m.Quantity.ToString("0.###", TrTime.Culture)</td><td>@m.Unit</td>
+                                <td class="small">@m.AddedBy</td><td class="small">@TrTime.Format(m.AddedAtUtc)</td><td class="small">@m.Note</td>
+                                <td class="text-end">
+                                    @if ((Model.CanManage || Model.CanApprove) && WorkflowRules.AcceptsContent(w.Status))
+                                    {
+                                        <form method="post" action="/isler/@w.Id/malzeme/@m.Id/sil" data-confirm="Bu malzeme satırı kaldırılsın mı?">
+                                            <button class="btn btn-sm btn-outline-danger" type="submit" title="Kaldır">@Ui.Icon("trash")<span class="visually-hidden">Kaldır</span></button>
+                                        </form>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-secondary">Yalnız işte bildirilen tüketimdir; stok bakiyesi tutulmaz.</p>
+        }
+    </div>
+
+    <div class="tab-pane fade card-body" id="dosyalar" role="tabpanel">
+        @if (Model.CanContribute)
+        {
+            <form method="post" action="/isler/@w.Id/dosya" enctype="multipart/form-data" class="row g-2 align-items-end mb-3 upload-form">
+                <div class="col-md-4">
+                    <label class="form-label small" for="files">Fotoğraf / dosya</label>
+                    <input id="files" type="file" name="files" class="form-control" multiple required accept="@Saha360.Infrastructure.FileStorage.FileValidator.AcceptAttribute" capture="environment" />
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label small" for="ftype">Tür</label>
+                    <select id="ftype" name="type" class="form-select">
+                        @foreach (var t in Enum.GetValues<AttachmentType>()) { <option value="@t">@TrNames.Of(t)</option> }
+                    </select>
+                </div>
+                <div class="col-6 col-md-4">
+                    <label class="form-label small" for="caption">Açıklama</label>
+                    <input id="caption" name="caption" class="form-control" maxlength="500" />
+                </div>
+                <div class="col-md-2"><button class="btn btn-primary w-100" type="submit">@Ui.Icon("camera") Yükle</button></div>
+                <div class="col-12 form-text">JPG, PNG, WEBP veya PDF · dosya başına en fazla 10 MB.</div>
+            </form>
+        }
+        @if (Model.Attachments.Count == 0)
+        {
+            <div class="empty">@Ui.Icon("camera", "big") <div>Henüz fotoğraf veya dosya yok.</div></div>
+        }
+        <div class="gallery">
+            @foreach (var a in photos)
+            {
+                <figure class="thumb">
+                    <a href="/dosya/@a.Id" data-lightbox data-caption="@a.Caption"><img src="/dosya/@a.Id" alt="@(a.Caption ?? a.FileName)" loading="lazy" /></a>
+                    <figcaption>
+                        <span class="badge text-bg-light border">@TrNames.Of(a.Type)</span> @a.Caption
+                        <div class="small text-secondary">@a.UploadedBy · @TrTime.Format(a.CreatedAtUtc)</div>
+                        @if (a.CanDelete)
+                        {
+                            <form method="post" action="/isler/@w.Id/dosya/@a.Id/sil" data-confirm="Bu dosya kaldırılsın mı? (Kayıt işlem geçmişinde kalır.)">
+                                <button class="btn btn-link btn-sm text-danger p-0" type="submit">Kaldır</button>
+                            </form>
+                        }
+                    </figcaption>
+                </figure>
+            }
+        </div>
+        @if (docs.Count > 0)
+        {
+            <ul class="list-group mt-3">
+                @foreach (var a in docs)
+                {
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>@Ui.Icon("clip") <a href="/dosya/@a.Id?indir=true">@a.FileName</a> <span class="small text-secondary">@Ui.FileSize(a.Size) · @a.UploadedBy · @TrTime.Format(a.CreatedAtUtc)</span></span>
+                        @if (a.CanDelete)
+                        {
+                            <form method="post" action="/isler/@w.Id/dosya/@a.Id/sil" data-confirm="Bu dosya kaldırılsın mı?"><button class="btn btn-sm btn-outline-danger" type="submit">Kaldır</button></form>
+                        }
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+
+    <div class="tab-pane fade card-body" id="notlar" role="tabpanel">
+        @if (Model.CanContribute)
+        {
+            <form method="post" action="/isler/@w.Id/not" class="mb-3">
+                <label class="form-label visually-hidden" for="noteText">Not</label>
+                <textarea id="noteText" name="text" class="form-control mb-2" rows="2" maxlength="4000" required placeholder="Not veya saha bilgisi ekleyin…"></textarea>
+                <button class="btn btn-primary btn-sm" type="submit">@Ui.Icon("comment") Not ekle</button>
+                <span class="small text-secondary ms-2">Notlar silinmez; düzeltme için yeni not ekleyin.</span>
+            </form>
+        }
+        @if (Model.Notes.Count == 0)
+        {
+            <div class="empty">@Ui.Icon("comment", "big") <div>Henüz not yok.</div></div>
+        }
+        <ul class="timeline">
+            @foreach (var n in Model.Notes)
+            {
+                <li>
+                    <div class="small text-secondary"><b>@n.AuthorName</b> · @TrTime.Format(n.CreatedAtUtc)</div>
+                    <div class="pre">@n.Text</div>
+                </li>
+            }
+        </ul>
+    </div>
+
+    <div class="tab-pane fade card-body" id="gecmis" role="tabpanel">
+        <p class="small text-secondary">İşlem geçmişi değiştirilemez. En yeni kayıt üsttedir.</p>
+        <ul class="timeline">
+            @foreach (var h in Model.History)
+            {
+                <li>
+                    <div class="small text-secondary">@TrTime.Format(h.AtUtc) · <b>@h.ActorName</b></div>
+                    <div>@h.Summary</div>
+                </li>
+            }
+        </ul>
+    </div>
+</div>
+
+@if (Model.CanReopen)
+{
+    var prevTeam = Model.Assignments.Where(a => w.Status == WorkStatus.Completed ? a.Status == AssignmentStatus.Finished : a.ReleaseReason == "İş iptal edildi")
+        .Select(a => a.EmployeeName).Distinct().ToList();
+    var planPast = w.PlannedEndAtUtc < DateTime.UtcNow;
+    <div class="modal fade" id="reopenModal" tabindex="-1" aria-labelledby="reopenLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form class="modal-content" method="post" action="/isler/@w.Id/yeniden-ac">
+                <div class="modal-header">
+                    <h2 class="modal-title h5" id="reopenLabel">İşi yeniden aç</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label" for="reopenText">Yeniden açma gerekçesi (zorunlu)</label>
+                    <textarea id="reopenText" name="reason" class="form-control" rows="3" maxlength="2000" required minlength="5" placeholder="ör. Aynı noktada arıza tekrarladı."></textarea>
+
+                    <div class="row g-2 mt-2">
+                        <div class="col-6"><label class="form-label small mb-0" for="reStart">Yeni planlanan başlangıç</label>
+                            <input id="reStart" name="start" type="datetime-local" class="form-control" required value="@TrTime.Input(planPast ? TrTime.ToUtc(TrTime.TodayLocal.AddDays(1).AddHours(8)) : w.PlannedStartAtUtc)" /></div>
+                        <div class="col-6"><label class="form-label small mb-0" for="reEnd">Yeni planlanan bitiş</label>
+                            <input id="reEnd" name="end" type="datetime-local" class="form-control" required value="@TrTime.Input(planPast ? TrTime.ToUtc(TrTime.TodayLocal.AddDays(1).AddHours(17)) : w.PlannedEndAtUtc)" /></div>
+                    </div>
+                    @if (planPast) { <div class="form-text">Eski plan geçmişte kaldığı için yarın önerildi; değiştirebilirsiniz.</div> }
+
+                    <div class="form-check mt-3">
+                        <input class="form-check-input" type="checkbox" name="restoreTeam" value="true" id="restoreTeam" checked="@(prevTeam.Count > 0)" disabled="@(prevTeam.Count == 0)" />
+                        <label class="form-check-label" for="restoreTeam">Önceki ekibi aynı görevlerle geri ata@(prevTeam.Count > 0 ? $" ({string.Join(", ", prevTeam)})" : " (önceki ekip yok)")</label>
+                    </div>
+                    <div class="form-text">Yeni tarihlerde başka işte veya izinde olan atlanır ve size bildirilir. Geri atananlara bildirim gider, kabul etmeleri beklenir.
+                        Ekibi sonra “Ekibi düzenle” ile değiştirebilirsiniz.</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Vazgeç</button>
+                    <button type="submit" class="btn btn-warning">@Ui.Icon("undo") Yeniden aç</button>
+                </div>
+            </form>
+        </div>
+    </div>
+}
+
+@* ─────────── Gerekçe isteyen eylemler için pencereler ─────────── *@
+@{
+    var modals = new List<(string Id, string Action, string Title, string Label, string Button, string Css, bool Required)>();
+    if (Model.CanReject) modals.Add(("rejectModal", "ret", "İşi reddet", "Ret gerekçesi (zorunlu)", "Reddet", "btn-danger", true));
+    if (Model.CanSubmit) modals.Add(("submitModal", "tamamla", "Tamamlandı olarak şefe gönder", "Yapılan iş / tamamlanma açıklaması (zorunlu)", "Şefe gönder", "btn-success", true));
+    if (Model.AwaitsMyApproval)
+    {
+        modals.Add(("approveModal", "onayla", "İşi onayla", "Onay notu (isteğe bağlı)", "Onayla ve tamamla", "btn-success", false));
+        modals.Add(("returnModal", "iade", "Düzeltme için iade et", "İade gerekçesi (zorunlu)", "İade et", "btn-danger", true));
+        modals.Add(("infoModal", "bilgi-iste", "Ek bilgi iste", "Personelden istenen bilgi (zorunlu)", "Gönder", "btn-primary", true));
+    }
+    if (Model.CanCancel) modals.Add(("cancelModal", "iptal", "İşi iptal et", "İptal gerekçesi (zorunlu) — ekipteki personel serbest kalır", "İşi iptal et", "btn-danger", true));
+}
+@foreach (var m in modals)
+{
+    var field = m.Action is "tamamla" or "onayla" ? "note" : "reason";
+    <div class="modal fade" id="@m.Id" tabindex="-1" aria-labelledby="@(m.Id)Label" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form class="modal-content" method="post" action="/isler/@w.Id/@m.Action" enctype="multipart/form-data">
+                <div class="modal-header">
+                    <h2 class="modal-title h5" id="@(m.Id)Label">@m.Title</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label" for="@(m.Id)Text">@m.Label</label>
+                    <textarea id="@(m.Id)Text" name="@field" class="form-control" rows="4" maxlength="2000" required="@m.Required" minlength="@(m.Required ? 5 : 0)"></textarea>
+
+                    @* Fotoğraf: işlemle birlikte işe eklenir (ör. bitmiş işin fotoğrafı, iade nedenini gösteren fotoğraf). *@
+                    <label class="form-label mt-3 mb-1" for="@(m.Id)Files">@Ui.Icon("camera") Fotoğraf ekle <span class="text-secondary small">(isteğe bağlı)</span></label>
+                    <input id="@(m.Id)Files" type="file" name="files" class="form-control" multiple
+                           accept="@Saha360.Infrastructure.FileStorage.FileValidator.AcceptAttribute" capture="environment" data-preview="#@(m.Id)Preview" />
+                    <div class="form-text">JPG, PNG, WEBP veya PDF · dosya başına en fazla 10 MB. Telefonda kamera açılır.</div>
+                    <div id="@(m.Id)Preview" class="modal-previews"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Vazgeç</button>
+                    <button type="submit" class="btn @m.Css">@m.Button</button>
+                </div>
+            </form>
+        </div>
+    </div>
+}
